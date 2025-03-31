@@ -4,3 +4,6 @@
 [submodule "lib/blt-gp"]
 	path = lib/blt-gp
 	url = https://github.com/Tri11Paragon/blt-gp
+[submodule "lib/blt"]
+	path = lib/blt
+	url = https://github.com/Tri11Paragon/BLT
