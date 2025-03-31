@@ -1,3 +1,6 @@
 [submodule "lib/blt-with-graphics"]
 	path = lib/blt-with-graphics
 	url = https://git.tpgc.me/tri11paragon/BLT-With-Graphics-Template
+[submodule "lib/blt-gp"]
+	path = lib/blt-gp
+	url = https://github.com/Tri11Paragon/blt-gp
