@@ -38,7 +38,7 @@ auto& make_sub()
 {
 	static blt::gp::operation_t sub([](const T a, const T b) -> T {
 		return a - b;
-	}, "sub");
+	}, "sub_" + blt::type_string<T>());
 	return sub;
 }
 
@@ -47,8 +47,17 @@ auto& make_mul()
 {
 	static blt::gp::operation_t mul([](const T a, const T b) -> T {
 		return a * b;
-	}, "mul");
+	}, "mul_" + blt::type_string<T>());
 	return mul;
+}
+
+template <typename T>
+auto& make_div()
+{
+	static blt::gp::operation_t pro_div([](const T a, const T b) -> T {
+		return a / b;
+	}, "div_" + blt::type_string<T>());
+	return pro_div;
 }
 
 template <typename T>
@@ -56,7 +65,7 @@ auto& make_prot_div()
 {
 	static blt::gp::operation_t pro_div([](const T a, const T b) -> T {
 		return b == static_cast<T>(0) ? static_cast<T>(0) : a / b;
-	}, "div");
+	}, "pro_div_" + blt::type_string<T>());
 	return pro_div;
 }
 

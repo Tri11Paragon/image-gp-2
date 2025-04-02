@@ -7,3 +7,9 @@
 [submodule "lib/blt"]
 	path = lib/blt
 	url = https://github.com/Tri11Paragon/BLT
+[submodule "lib/stb"]
+	path = lib/stb
+	url = https://github.com/nothings/stb
+[submodule "lib/FastNoise2"]
+	path = lib/FastNoise2
+	url = https://github.com/Auburn/FastNoise2

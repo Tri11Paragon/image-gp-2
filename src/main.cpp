@@ -1,65 +1,21 @@
-#include <iostream>
-#include <operations.h>
-#include <random>
-#include <blt/gp/program.h>
+#include <gp_system.h>
+
 #include <blt/gfx/window.h>
 #include "blt/gfx/renderer/resource_manager.h"
 #include "blt/gfx/renderer/batch_2d_renderer.h"
 #include "blt/gfx/renderer/camera.h"
 #include <imgui.h>
-#include <image_storage.h>
-
-using namespace blt::gp;
 
 blt::gfx::matrix_state_manager global_matrices;
 blt::gfx::resource_manager resources;
 blt::gfx::batch_renderer_2d renderer_2d(resources, global_matrices);
 blt::gfx::first_person_camera camera;
 
-gp_program program{
-	[]() {
-		return std::random_device()();
-	}
-};
-
-void setup_operations()
-{
-	static operation_t op_sin([](const float a) {
-		return std::sin(a);
-	}, "sin");
-	static operation_t op_cos([](const float a) {
-		return std::cos(a);
-	}, "cos");
-	static operation_t op_exp([](const float a) {
-		return std::exp(a);
-	}, "exp");
-	static operation_t op_log([](const float a) {
-		return a <= 0.0f ? 0.0f : std::log(a);
-	}, "log");
-	static auto lit = operation_t([]() {
-		return program.get_random().get_float(-1.0f, 1.0f);
-	}, "lit").set_ephemeral();
-
-	// static gp:: operation_t op_x([](const context& context)
-	// {
-	// 	return context.x;
-	// }, "x");
-
-	operator_builder builder{};
-	builder.build(
-		make_add<float>(),
-		make_sub<float>(),
-		make_mul<float>(),
-		make_prot_div<float>(),
-		op_sin, op_cos, op_exp, op_log, lit
-		);
-	program.set_operations(builder.grab());
-}
-
 void init(const blt::gfx::window_data&)
 {
 	using namespace blt::gfx;
 
+	setup_gp_system(64);
 
 	global_matrices.create_internals();
 	resources.load_resources();

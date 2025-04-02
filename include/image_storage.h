@@ -21,10 +21,32 @@
 
 #include <array>
 #include <atomic>
+#include <string>
+#include <blt/std/types.h>
+
+using image_pixel_t = float;
+constexpr blt::i32 IMAGE_DIMENSIONS = 256;
+constexpr blt::i32 IMAGE_CHANNELS = 4;
+
+constexpr blt::size_t IMAGE_SIZE = IMAGE_DIMENSIONS * IMAGE_DIMENSIONS;
+constexpr blt::size_t IMAGE_SIZE_CHANNELS = IMAGE_SIZE * IMAGE_CHANNELS;
+constexpr blt::size_t IMAGE_SIZE_BYTES = IMAGE_SIZE_CHANNELS * sizeof(image_pixel_t);
 
 struct image_storage_t
 {
-	std::array<float, 4> data;
+	std::array<image_pixel_t, IMAGE_SIZE_CHANNELS> data;
+
+	static image_storage_t from_file(const std::string& path);
+
+	image_pixel_t& get(const blt::size_t x, const blt::size_t y, const blt::i32 c)
+	{
+		return data[(y * IMAGE_DIMENSIONS + x) * IMAGE_CHANNELS + c];
+	}
+
+	[[nodiscard]] const image_pixel_t& get(const blt::size_t x, const blt::size_t y, const blt::i32 c) const
+	{
+		return data[(y * IMAGE_DIMENSIONS + x) * IMAGE_CHANNELS + c];
+	}
 };
 
 struct atomic_node_t
@@ -60,6 +82,13 @@ public:
 				return head;
 		}
 	}
+
+	~atomic_list_t()
+	{
+		while (m_head != nullptr)
+			delete pop_front();
+	}
+
 private:
 	std::atomic<atomic_node_t*> m_head = nullptr;
 };
@@ -75,7 +104,7 @@ struct image_t
 		{
 			data = front->data;
 			delete front;
-		}else
+		} else
 			data = new image_storage_t;
 	}
 
@@ -86,6 +115,35 @@ struct image_t
 		data = nullptr;
 		g_image_list.push_back(node);
 	}
+
+	[[nodiscard]] void* as_void_const() const
+	{
+		return const_cast<void*>(static_cast<const void*>(data->data.data()));
+	}
+
+	[[nodiscard]] void* as_void() const
+	{
+		return data->data.data();
+	}
+
+	friend image_t operator+(const image_t& lhs, const image_t& rhs);
+
+	friend image_t operator-(const image_t& lhs, const image_t& rhs);
+
+	friend image_t operator*(const image_t& lhs, const image_t& rhs);
+
+	friend image_t operator/(const image_t& lhs, const image_t& rhs);
+
+	image_storage_t& get_data()
+	{
+		return *data;
+	}
+
+	[[nodiscard]] const image_storage_t& get_data() const
+	{
+		return *data;
+	}
+
 private:
 	image_storage_t* data;
 };

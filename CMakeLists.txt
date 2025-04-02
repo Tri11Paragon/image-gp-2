@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(image-gp-2 VERSION 0.0.3)
+project(image-gp-2 VERSION 0.0.4)
 
 option(ENABLE_ADDRSAN "Enable the address sanitizer" OFF)
 option(ENABLE_UBSAN "Enable the ub sanitizer" OFF)
@@ -10,10 +10,12 @@ set(CMAKE_CXX_STANDARD 17)
 add_subdirectory(lib/blt)
 add_subdirectory(lib/blt-with-graphics)
 add_subdirectory(lib/blt-gp)
+add_subdirectory(lib/FastNoise2)
 
 find_package(OpenCV REQUIRED)
 
 include_directories( ${OpenCV_INCLUDE_DIRS} )
+include_directories(lib/stb)
 
 include_directories(include/)
 file(GLOB_RECURSE PROJECT_BUILD_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
