@@ -120,14 +120,10 @@ void update(const blt::gfx::window_data& data)
 
 	if (ImGui::Begin("Debug"))
 	{
-		const auto allocated_nodes = g_allocated_nodes.load(std::memory_order_relaxed);
-		const auto deallocated_nodes = g_deallocated_nodes.load(std::memory_order_relaxed);
 		const auto allocated_blocks = g_allocated_blocks.load(std::memory_order_relaxed);
 		const auto deallocated_blocks = g_deallocated_blocks.load(std::memory_order_relaxed);
-		ImGui::Text("Allocated Nodes / Deallocated Nodes: (%ld / %ld) (%lf%% / %ld)", allocated_nodes, deallocated_nodes,
-					(static_cast<double>(deallocated_nodes) / static_cast<double>(allocated_nodes)) * 100.0, allocated_nodes - deallocated_nodes);
-		ImGui::Text("Allocated Blocks / Deallocated Blocks: (%ld / %ld) (%lf%% / %ld)", allocated_blocks, deallocated_blocks,
-					(static_cast<double>(deallocated_blocks) / static_cast<double>(allocated_blocks)) * 100.0, allocated_blocks - deallocated_blocks);
+		ImGui::Text("Allocated Blocks / Deallocated Blocks: (%ld / %ld) (%ld / %ld) (Total: %ld)", allocated_blocks, deallocated_blocks,
+					g_image_list.images.size(), allocated_blocks - deallocated_blocks, g_image_list.images.size() + (allocated_blocks - deallocated_blocks));
 	}
 	ImGui::End();
 

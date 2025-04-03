@@ -24,6 +24,7 @@
 #include <string>
 #include <blt/logging/logging.h>
 #include <blt/std/types.h>
+#include <mutex>
 
 using image_pixel_t = float;
 constexpr blt::i32 IMAGE_DIMENSIONS = 256;
@@ -50,87 +51,51 @@ struct image_storage_t
 	}
 };
 
-inline std::atomic_uint64_t g_allocated_nodes = 0;
-inline std::atomic_uint64_t g_deallocated_nodes = 0;
-
-struct atomic_node_t
-{
-	explicit atomic_node_t(image_storage_t* data): data(data)
-	{
-		++g_allocated_nodes;
-	}
-
-	std::atomic<atomic_node_t*> next = nullptr;
-	image_storage_t* data = nullptr;
-
-	~atomic_node_t()
-	{
-		++g_deallocated_nodes;
-	}
-};
-
 inline std::atomic_uint64_t g_allocated_blocks = 0;
 inline std::atomic_uint64_t g_deallocated_blocks = 0;
 
-class atomic_list_t
+inline std::mutex g_image_list_mutex;
+
+struct image_cleaner_t
 {
-public:
-	atomic_list_t() = default;
-
-	void push_back(atomic_node_t* node)
+	~image_cleaner_t()
 	{
-		while (true)
-		{
-			auto head = this->m_head.load();
-			node->next = head;
-			if (this->m_head.compare_exchange_weak(head, node))
-				break;
-		}
+		for (auto v : images)
+			delete v;
 	}
 
-	atomic_node_t* pop_front()
-	{
-		while (true)
-		{
-			auto head = this->m_head.load();
-			if (head == nullptr)
-				return nullptr;
-			if (this->m_head.compare_exchange_weak(head, head->next))
-				return head;
-		}
-	}
-
-	~atomic_list_t()
-	{
-		while (m_head != nullptr)
-			delete pop_front();
-	}
-
-private:
-	std::atomic<atomic_node_t*> m_head = nullptr;
+	std::vector<image_storage_t*> images;
 };
 
-inline atomic_list_t g_image_list;
+inline image_cleaner_t g_image_list;
 
 struct image_t
 {
 	image_t()
 	{
-		const auto front = g_image_list.pop_front();
-		if (front)
+		image_storage_t* front = nullptr;
 		{
-			data = front->data;
-			delete front;
-		} else
+			std::scoped_lock lock(g_image_list_mutex);
+			if (!g_image_list.images.empty())
+			{
+				front = g_image_list.images.back();
+				g_image_list.images.pop_back();
+			}
+		}
+		if (front)
+			data = front;
+		else
 			data = new image_storage_t;
 		++g_allocated_blocks;
 	}
 
 	void drop()
 	{
-		const auto node = new atomic_node_t(data); // NOLINT
+		{
+			std::scoped_lock lock(g_image_list_mutex);
+			g_image_list.images.push_back(data);
+		}
 		data = nullptr;
-		g_image_list.push_back(node);
 		++g_deallocated_blocks;
 	}
 
