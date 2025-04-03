@@ -34,6 +34,7 @@ std::thread run_gp()
 				} else
 					std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			}
+			cleanup();
 		}
 	};
 }
@@ -51,6 +52,8 @@ void init(const blt::gfx::window_data&)
 	global_matrices.create_internals();
 	resources.load_resources();
 	renderer_2d.create();
+
+	setWindowSize(1400, 720);
 }
 
 void update(const blt::gfx::window_data& data)
@@ -123,21 +126,24 @@ void update(const blt::gfx::window_data& data)
 		const auto allocated_blocks = g_allocated_blocks.load(std::memory_order_relaxed);
 		const auto deallocated_blocks = g_deallocated_blocks.load(std::memory_order_relaxed);
 		ImGui::Text("Allocated Blocks / Deallocated Blocks: (%ld / %ld) (%ld / %ld) (Total: %ld)", allocated_blocks, deallocated_blocks,
-					g_image_list.images.size(), allocated_blocks - deallocated_blocks, g_image_list.images.size() + (allocated_blocks - deallocated_blocks));
+					g_image_list.images.size(), allocated_blocks - deallocated_blocks,
+					g_image_list.images.size() + (allocated_blocks - deallocated_blocks));
 	}
 	ImGui::End();
 
 	for (blt::size_t i = 0; i < population_size; i++)
 		gl_images[i]->upload(get_image(i).data.data(), IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGBA, GL_FLOAT);
 
-	for (int i = 0; i < 10; i++)
+	constexpr int images_x = 10;
+	constexpr int images_y = 6;
+	for (int i = 0; i < images_x; i++)
 	{
-		for (int j = 0; j < 6; j++)
+		for (int j = 0; j < images_y; j++)
 		{
 			constexpr float padding_x = 32;
 			constexpr float padding_y = 32;
-			constexpr float img_width = 128;
-			constexpr float img_height = 128;
+			const float img_width = (static_cast<float>(data.width) - padding_x * 2 - padding_x * (images_x-1) - 256) / images_x;
+			const float img_height = (static_cast<float>(data.height) - padding_y * 2 - padding_y * (images_y-1) - 32) / images_y;
 			const float x = 256 + static_cast<float>(i) * img_width + padding_x * static_cast<float>(i) + img_width;
 			const float y = static_cast<float>(data.height) - (16 + static_cast<float>(j) * img_height + padding_y * static_cast<float>(j) +
 				img_height);

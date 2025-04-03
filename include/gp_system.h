@@ -29,4 +29,6 @@ bool should_terminate();
 
 image_storage_t& get_image(blt::size_t index);
 
+void cleanup();
+
 #endif //GP_SYSTEM_H

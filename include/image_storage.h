@@ -28,7 +28,7 @@
 
 using image_pixel_t = float;
 constexpr blt::i32 IMAGE_DIMENSIONS = 256;
-constexpr blt::i32 IMAGE_CHANNELS = 4;
+constexpr blt::i32 IMAGE_CHANNELS = 1;
 
 constexpr blt::size_t IMAGE_SIZE = IMAGE_DIMENSIONS * IMAGE_DIMENSIONS;
 constexpr blt::size_t IMAGE_SIZE_CHANNELS = IMAGE_SIZE * IMAGE_CHANNELS;
@@ -38,16 +38,16 @@ struct image_storage_t
 {
 	std::array<image_pixel_t, IMAGE_SIZE_CHANNELS> data;
 
-	static image_storage_t from_file(const std::string& path);
+	static std::array<image_storage_t, 3> from_file(const std::string& path);
 
-	image_pixel_t& get(const blt::size_t x, const blt::size_t y, const blt::i32 c)
+	image_pixel_t& get(const blt::size_t x, const blt::size_t y)
 	{
-		return data[(y * IMAGE_DIMENSIONS + x) * IMAGE_CHANNELS + c];
+		return data[(y * IMAGE_DIMENSIONS + x) * IMAGE_CHANNELS];
 	}
 
-	[[nodiscard]] const image_pixel_t& get(const blt::size_t x, const blt::size_t y, const blt::i32 c) const
+	[[nodiscard]] const image_pixel_t& get(const blt::size_t x, const blt::size_t y) const
 	{
-		return data[(y * IMAGE_DIMENSIONS + x) * IMAGE_CHANNELS + c];
+		return data[(y * IMAGE_DIMENSIONS + x) * IMAGE_CHANNELS];
 	}
 };
 

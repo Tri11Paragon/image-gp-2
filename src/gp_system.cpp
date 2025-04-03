@@ -24,34 +24,28 @@
 
 using namespace blt::gp;
 
-gp_program program{
-	[]() {
-		return std::random_device()();
-	}
-};
+std::array<gp_program*, 3> programs;
 
-std::vector<image_storage_t> images;
-image_storage_t reference_image = image_storage_t::from_file("../silly.png");
+std::vector<std::array<image_pixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3>> images;
+auto reference_image = image_storage_t::from_file("../silly.png");
 
+template <size_t Channel>
 void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t index)
 {
 	auto image = tree.get_evaluation_ref<image_t>();
-	std::memcpy(images[index].data.data(), image->get_data().data.data(), IMAGE_SIZE_BYTES);
+
+	// std::memcpy(images[index].data.data(), image->get_data().data.data(), IMAGE_SIZE_BYTES);
 	auto& data = image->get_data();
 	for (blt::size_t x = 0; x < IMAGE_DIMENSIONS; ++x)
 	{
 		for (blt::size_t y = 0; y < IMAGE_DIMENSIONS; ++y)
 		{
+			images[index][(x * IMAGE_DIMENSIONS + y) * 3 + Channel] = data.get(x, y);
+
 			auto multiplier = (1 - std::abs((static_cast<float>(x) / (static_cast<float>(IMAGE_DIMENSIONS) / 2)) - 1)) + (1 - std::abs(
 				(static_cast<float>(y) / (static_cast<float>(IMAGE_DIMENSIONS) / 2)) - 1));
-			for (blt::size_t c = 0; c < IMAGE_CHANNELS; ++c)
-			{
-				const auto diff_r = data.get(x, y, 0) - reference_image.get(x, y, 0);
-				const auto diff_g = data.get(x, y, 1) - reference_image.get(x, y, 1);
-				const auto diff_b = data.get(x, y, 2) - reference_image.get(x, y, 2);
-				const auto total = (diff_r + diff_g + diff_b) / 3;
-				fitness.raw_fitness += (total * total) * multiplier;
-			}
+			const auto diff = data.get(x, y) - reference_image[Channel].get(x, y);
+			fitness.raw_fitness += (diff * diff) * multiplier;
 		}
 	}
 	fitness.raw_fitness /= static_cast<float>(IMAGE_SIZE_CHANNELS);
@@ -59,15 +53,14 @@ void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t inde
 	fitness.adjusted_fitness = -fitness.standardized_fitness;
 }
 
-void setup_operations()
+void setup_operations(gp_program* program)
 {
 	static operation_t op_image_x([]() {
 		image_t ret;
 		for (blt::size_t x = 0; x < IMAGE_DIMENSIONS; ++x)
 		{
 			for (blt::size_t y = 0; y < IMAGE_DIMENSIONS; ++y)
-				for (blt::i32 c = 0; c < IMAGE_CHANNELS; ++c)
-					ret.get_data().get(x, y, c) = static_cast<float>(x) / static_cast<float>(IMAGE_DIMENSIONS - 1);
+				ret.get_data().get(x, y) = static_cast<float>(x) / static_cast<float>(IMAGE_DIMENSIONS - 1);
 		}
 		return ret;
 	});
@@ -76,8 +69,7 @@ void setup_operations()
 		for (blt::size_t x = 0; x < IMAGE_DIMENSIONS; ++x)
 		{
 			for (blt::size_t y = 0; y < IMAGE_DIMENSIONS; ++y)
-				for (blt::i32 c = 0; c < IMAGE_CHANNELS; ++c)
-					ret.get_data().get(x, y, c) = static_cast<float>(y) / static_cast<float>(IMAGE_DIMENSIONS - 1);
+				ret.get_data().get(x, y) = static_cast<float>(y) / static_cast<float>(IMAGE_DIMENSIONS - 1);
 		}
 		return ret;
 	});
@@ -86,8 +78,7 @@ void setup_operations()
 		for (blt::size_t x = 0; x < IMAGE_DIMENSIONS; ++x)
 		{
 			for (blt::size_t y = 0; y < IMAGE_DIMENSIONS; ++y)
-				for (blt::i32 c = 0; c < IMAGE_CHANNELS; ++c)
-					ret.get_data().get(x, y, c) = static_cast<float>(x + y) / static_cast<float>((IMAGE_DIMENSIONS - 1) * (IMAGE_DIMENSIONS - 1));
+				ret.get_data().get(x, y) = static_cast<float>(x + y) / static_cast<float>((IMAGE_DIMENSIONS - 1) * (IMAGE_DIMENSIONS - 1));
 		}
 		return ret;
 	});
@@ -95,9 +86,9 @@ void setup_operations()
 		const auto blend = std::min(std::max(f, 0.0f), 1.0f);
 		const auto beta = 1.0f - blend;
 		image_t ret;
-		const cv::Mat src1{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32FC4, a.as_void()};
-		const cv::Mat src2{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32FC4, b.as_void()};
-		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32FC4, ret.get_data().data.data()};
+		const cv::Mat src1{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32FC1, a.as_void()};
+		const cv::Mat src2{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32FC1, b.as_void()};
+		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32FC1, ret.get_data().data.data()};
 		addWeighted(src1, blend, src2, beta, 0.0, dst);
 		return ret;
 	}, "blend");
@@ -117,14 +108,14 @@ void setup_operations()
 			return -std::log(-a);
 		return std::log(a);
 	}, "log_float");
-	static auto lit = operation_t([]() {
-		return program.get_random().get_float(-1.0f, 1.0f);
+	static auto lit = operation_t([program]() {
+		return program->get_random().get_float(-1.0f, 1.0f);
 	}, "lit_float").set_ephemeral();
 
 	operator_builder builder{};
 	builder.build(make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y, op_image_xy,
 				make_add<float>(), make_sub<float>(), make_mul<float>(), make_prot_div<float>(), op_sin, op_cos, op_exp, op_log, lit);
-	program.set_operations(builder.grab());
+	program->set_operations(builder.grab());
 }
 
 void setup_gp_system(const blt::size_t population_size)
@@ -132,24 +123,30 @@ void setup_gp_system(const blt::size_t population_size)
 	prog_config_t config{};
 	config.population_size = population_size;
 	config.elites = 2;
-	program.set_config(config);
+	program = new gp_program{
+		[]() {
+			return std::random_device()();
+		},
+		config
+	};
+
 	images.resize(population_size);
 	setup_operations();
 	static auto sel = select_tournament_t{};
-	program.generate_initial_population(program.get_typesystem().get_type<image_t>().id());
-	program.setup_generational_evaluation(fitness_func, sel, sel, sel);
+	program->generate_initial_population(program->get_typesystem().get_type<image_t>().id());
+	program->setup_generational_evaluation(fitness_func, sel, sel, sel);
 }
 
 void run_step()
 {
-	BLT_TRACE("------------\\{Begin Generation {}}------------", program.get_current_generation());
+	BLT_TRACE("------------\\{Begin Generation {}}------------", program->get_current_generation());
 	BLT_TRACE("Creating next generation");
-	program.create_next_generation();
+	program->create_next_generation();
 	BLT_TRACE("Move to next generation");
-	program.next_generation();
+	program->next_generation();
 	BLT_TRACE("Evaluate Fitness");
-	program.evaluate_fitness();
-	const auto& stats = program.get_population_stats();
+	program->evaluate_fitness();
+	const auto& stats = program->get_population_stats();
 	BLT_TRACE("Avg Fit: {:0.6f}, Best Fit: {:0.6f}, Worst Fit: {:0.6f}, Overall Fit: {:0.6f}", stats.average_fitness.load(std::memory_order_relaxed),
 			stats.best_fitness.load(std::memory_order_relaxed), stats.worst_fitness.load(std::memory_order_relaxed),
 			stats.overall_fitness.load(std::memory_order_relaxed));
@@ -158,10 +155,15 @@ void run_step()
 
 bool should_terminate()
 {
-	return program.should_terminate();
+	return program->should_terminate();
 }
 
 image_storage_t& get_image(blt::size_t index)
 {
 	return images[index];
+}
+
+void cleanup()
+{
+	delete program;
 }

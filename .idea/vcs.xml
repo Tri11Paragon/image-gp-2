@@ -5,9 +5,6 @@
     <mapping directory="$PROJECT_DIR$/cmake-build-debug/_deps/freetype-src" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-debug/_deps/freetype-src/subprojects/dlg" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-debug/_deps/imgui-src" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/cmake-build-release-examples/_deps/freetype-src" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/cmake-build-release-examples/_deps/freetype-src/subprojects/dlg" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/cmake-build-release-examples/_deps/imgui-src" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-release/_deps/freetype-src" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-release/_deps/freetype-src/subprojects/dlg" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-release/_deps/imgui-src" vcs="Git" />
@@ -17,6 +14,7 @@
     <mapping directory="$PROJECT_DIR$/cmake-build-relwithdebinfo/_deps/freetype-src" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-relwithdebinfo/_deps/freetype-src/subprojects/dlg" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-relwithdebinfo/_deps/imgui-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/FastNoise2" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/blt" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/blt-gp" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/blt-gp/lib/blt" vcs="Git" />
@@ -25,5 +23,6 @@
     <mapping directory="$PROJECT_DIR$/lib/blt-with-graphics/libraries/BLT" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/blt-with-graphics/libraries/BLT/libraries/parallel-hashmap" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/blt/libraries/parallel-hashmap" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/stb" vcs="Git" />
   </component>
 </project>
