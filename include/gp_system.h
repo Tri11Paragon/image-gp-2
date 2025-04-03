@@ -18,6 +18,7 @@
 
 #ifndef GP_SYSTEM_H
 #define GP_SYSTEM_H
+#include <image_storage.h>
 #include <blt/std/types.h>
 
 void setup_gp_system(blt::size_t population_size);
@@ -25,5 +26,7 @@ void setup_gp_system(blt::size_t population_size);
 void run_step();
 
 bool should_terminate();
+
+image_storage_t& get_image(blt::size_t index);
 
 #endif //GP_SYSTEM_H

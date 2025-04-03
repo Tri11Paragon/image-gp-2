@@ -22,6 +22,7 @@
 #include <array>
 #include <atomic>
 #include <string>
+#include <blt/logging/logging.h>
 #include <blt/std/types.h>
 
 using image_pixel_t = float;
@@ -49,11 +50,27 @@ struct image_storage_t
 	}
 };
 
+inline std::atomic_uint64_t g_allocated_nodes = 0;
+inline std::atomic_uint64_t g_deallocated_nodes = 0;
+
 struct atomic_node_t
 {
+	explicit atomic_node_t(image_storage_t* data): data(data)
+	{
+		++g_allocated_nodes;
+	}
+
 	std::atomic<atomic_node_t*> next = nullptr;
 	image_storage_t* data = nullptr;
+
+	~atomic_node_t()
+	{
+		++g_deallocated_nodes;
+	}
 };
+
+inline std::atomic_uint64_t g_allocated_blocks = 0;
+inline std::atomic_uint64_t g_deallocated_blocks = 0;
 
 class atomic_list_t
 {
@@ -106,14 +123,15 @@ struct image_t
 			delete front;
 		} else
 			data = new image_storage_t;
+		++g_allocated_blocks;
 	}
 
 	void drop()
 	{
-		const auto node = new atomic_node_t(); // NOLINT
-		node->data = data;
+		const auto node = new atomic_node_t(data); // NOLINT
 		data = nullptr;
 		g_image_list.push_back(node);
+		++g_deallocated_blocks;
 	}
 
 	[[nodiscard]] void* as_void_const() const

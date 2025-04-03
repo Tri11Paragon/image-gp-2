@@ -16,8 +16,6 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include <image_storage.h>
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include <stb_image.h>
 #include <stb_image_resize2.h>
 #include <blt/iterator/zip.h>
@@ -32,7 +30,7 @@ image_storage_t image_storage_t::from_file(const std::string& path)
 	image_storage_t storage{};
 	stbir_resize_float_linear(data, x, y, 0, storage.data.data(), IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, 0, STBIR_RGBA);
 
-	STBI_FREE(data);
+	stbi_image_free(data);
 	return storage;
 }
 

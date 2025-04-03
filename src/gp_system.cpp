@@ -30,11 +30,13 @@ gp_program program{
 	}
 };
 
+std::vector<image_storage_t> images;
 image_storage_t reference_image = image_storage_t::from_file("../silly.png");
 
-void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t)
+void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t index)
 {
 	auto image = tree.get_evaluation_ref<image_t>();
+	std::memcpy(images[index].data.data(), image->get_data().data.data(), IMAGE_SIZE_BYTES);
 	auto& data = image->get_data();
 	for (blt::size_t x = 0; x < IMAGE_DIMENSIONS; ++x)
 	{
@@ -47,13 +49,14 @@ void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t)
 				const auto diff_r = data.get(x, y, 0) - reference_image.get(x, y, 0);
 				const auto diff_g = data.get(x, y, 1) - reference_image.get(x, y, 1);
 				const auto diff_b = data.get(x, y, 2) - reference_image.get(x, y, 2);
-				fitness.raw_fitness += diff_r * diff_r * multiplier + diff_g * diff_g * multiplier + diff_b * diff_b * multiplier;
+				const auto total = (diff_r + diff_g + diff_b) / 3;
+				fitness.raw_fitness += (total * total) * multiplier;
 			}
 		}
 	}
-	fitness.raw_fitness /= static_cast<float>(IMAGE_DIMENSIONS * IMAGE_DIMENSIONS);
+	fitness.raw_fitness /= static_cast<float>(IMAGE_SIZE_CHANNELS);
 	fitness.standardized_fitness = fitness.raw_fitness;
-	fitness.adjusted_fitness = fitness.standardized_fitness;
+	fitness.adjusted_fitness = -fitness.standardized_fitness;
 }
 
 void setup_operations()
@@ -108,7 +111,11 @@ void setup_operations()
 		return std::exp(a);
 	}, "exp_float");
 	static operation_t op_log([](const float a) {
-		return a <= 0.0f ? 0.0f : std::log(a);
+		if (blt::f_equal(a, 0))
+			return 0.0f;
+		if (a < 0)
+			return -std::log(-a);
+		return std::log(a);
 	}, "log_float");
 	static auto lit = operation_t([]() {
 		return program.get_random().get_float(-1.0f, 1.0f);
@@ -124,7 +131,9 @@ void setup_gp_system(const blt::size_t population_size)
 {
 	prog_config_t config{};
 	config.population_size = population_size;
+	config.elites = 2;
 	program.set_config(config);
+	images.resize(population_size);
 	setup_operations();
 	static auto sel = select_tournament_t{};
 	program.generate_initial_population(program.get_typesystem().get_type<image_t>().id());
@@ -150,4 +159,9 @@ void run_step()
 bool should_terminate()
 {
 	return program.should_terminate();
+}
+
+image_storage_t& get_image(blt::size_t index)
+{
+	return images[index];
 }
