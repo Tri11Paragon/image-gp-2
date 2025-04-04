@@ -70,7 +70,7 @@ void update(const blt::gfx::window_data& data)
 	ImGui::SetNextWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y));
 	ImGui::Begin("MainWindow", nullptr,
 				ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
-				ImGuiWindowFlags_NoBringToFrontOnFocus);
+				ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoBackground);
 
 	// Create the tab bar
 	if (ImGui::BeginTabBar("MainTabs"))
@@ -132,7 +132,26 @@ void update(const blt::gfx::window_data& data)
 	ImGui::End();
 
 	for (blt::size_t i = 0; i < population_size; i++)
-		gl_images[i]->upload(get_image(i).data.data(), IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGBA, GL_FLOAT);
+	{
+		auto& image = get_image(i);
+		float min = std::numeric_limits<float>::max();
+		float max = std::numeric_limits<float>::min();
+
+		for (auto& pixel : image)
+		{
+			if (std::isnan(pixel) || std::isinf(pixel))
+				pixel = 0;
+			if (pixel > max)
+				max = pixel;
+			if (pixel < min)
+				min = pixel;
+		}
+
+		for (auto& pixel : image)
+			pixel = (pixel - min) / (max - min);
+
+		gl_images[i]->upload(get_image(i).data(), IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGB, GL_FLOAT);
+	}
 
 	constexpr int images_x = 10;
 	constexpr int images_y = 6;
@@ -142,12 +161,12 @@ void update(const blt::gfx::window_data& data)
 		{
 			constexpr float padding_x = 32;
 			constexpr float padding_y = 32;
-			const float img_width = (static_cast<float>(data.width) - padding_x * 2 - padding_x * (images_x-1) - 256) / images_x;
-			const float img_height = (static_cast<float>(data.height) - padding_y * 2 - padding_y * (images_y-1) - 32) / images_y;
+			const float img_width = (static_cast<float>(data.width) - padding_x * 2 - padding_x * (images_x - 1) - 256) / images_x;
+			const float img_height = (static_cast<float>(data.height) - padding_y * 2 - padding_y * (images_y - 1) - 32) / images_y;
 			const float x = 256 + static_cast<float>(i) * img_width + padding_x * static_cast<float>(i) + img_width;
 			const float y = static_cast<float>(data.height) - (16 + static_cast<float>(j) * img_height + padding_y * static_cast<float>(j) +
 				img_height);
-			renderer_2d.drawRectangle(blt::gfx::rectangle2d_t{x, y, img_width, img_height}, std::to_string(i * j));
+			renderer_2d.drawRectangle(blt::gfx::rectangle2d_t{x, y, img_width, img_height}, std::to_string(i * images_y + j));
 		}
 	}
 

@@ -68,10 +68,11 @@ struct image_cleaner_t
 };
 
 inline image_cleaner_t g_image_list;
+inline std::atomic_uint64_t g_image_counter = 0;
 
 struct image_t
 {
-	image_t()
+	image_t(): id(++g_image_counter)
 	{
 		image_storage_t* front = nullptr;
 		{
@@ -87,7 +88,13 @@ struct image_t
 		else
 			data = new image_storage_t;
 		++g_allocated_blocks;
+
+		BLT_TRACE("Allocated {}!", id);
 	}
+
+	image_t(const image_t& other) = default;
+
+	image_t& operator=(const image_t& other) = default;
 
 	void drop()
 	{
@@ -97,6 +104,7 @@ struct image_t
 		}
 		data = nullptr;
 		++g_deallocated_blocks;
+		BLT_TRACE("Deallocated {}!", id);
 	}
 
 	[[nodiscard]] void* as_void_const() const
@@ -129,6 +137,7 @@ struct image_t
 
 private:
 	image_storage_t* data;
+	blt::size_t id;
 };
 
 #endif //IMAGE_STORAGE_H

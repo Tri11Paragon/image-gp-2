@@ -53,6 +53,7 @@ void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t inde
 	fitness.adjusted_fitness = -fitness.standardized_fitness;
 }
 
+template <typename T>
 void setup_operations(gp_program* program)
 {
 	static operation_t op_image_x([]() {
@@ -73,15 +74,13 @@ void setup_operations(gp_program* program)
 		}
 		return ret;
 	});
-	static operation_t op_image_xy([]() {
+	static auto op_image_ephemeral = operation_t([program]() {
 		image_t ret;
-		for (blt::size_t x = 0; x < IMAGE_DIMENSIONS; ++x)
-		{
-			for (blt::size_t y = 0; y < IMAGE_DIMENSIONS; ++y)
-				ret.get_data().get(x, y) = static_cast<float>(x + y) / static_cast<float>((IMAGE_DIMENSIONS - 1) * (IMAGE_DIMENSIONS - 1));
-		}
+		const auto value = program->get_random().get_float();
+		for (auto& v : ret.get_data().data)
+			v = value;
 		return ret;
-	});
+	}).set_ephemeral();
 	static operation_t op_image_blend([](const image_t& a, const image_t& b, const float f) {
 		const auto blend = std::min(std::max(f, 0.0f), 1.0f);
 		const auto beta = 1.0f - blend;
@@ -91,7 +90,32 @@ void setup_operations(gp_program* program)
 		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32FC1, ret.get_data().data.data()};
 		addWeighted(src1, blend, src2, beta, 0.0, dst);
 		return ret;
-	}, "blend");
+	}, "blend_image");
+	static operation_t op_image_sin([](const image_t& a) {
+		image_t ret;
+		for (const auto& [i, v] : blt::enumerate(std::as_const(a.get_data().data)))
+			ret.get_data().data[i] = std::sin(v);
+		return ret;
+	}, "sin_image");
+	static operation_t op_image_cos([](const image_t& a) {
+		image_t ret;
+		for (const auto& [i, v] : blt::enumerate(std::as_const(a.get_data().data)))
+			ret.get_data().data[i] = std::cos(v);
+		return ret;
+	}, "cos_image");
+	static operation_t op_image_log([](const image_t& a) {
+		image_t ret;
+		for (const auto& [i, v] : blt::enumerate(std::as_const(a.get_data().data)))
+		{
+			if (blt::f_equal(v, 0))
+				ret.get_data().data[i] = 0;
+			else if (v < 0)
+				ret.get_data().data[i] = -std::log(-v);
+			else
+				ret.get_data().data[i] = std::log(v);
+		}
+		return ret;
+	}, "sin_image");
 	static operation_t op_sin([](const float a) {
 		return std::sin(a);
 	}, "sin_float");
@@ -113,57 +137,85 @@ void setup_operations(gp_program* program)
 	}, "lit_float").set_ephemeral();
 
 	operator_builder builder{};
-	builder.build(make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y, op_image_xy,
-				make_add<float>(), make_sub<float>(), make_mul<float>(), make_prot_div<float>(), op_sin, op_cos, op_exp, op_log, lit);
+	builder.build(make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y, op_image_sin,
+				 op_image_cos, op_image_log, make_add<float>(), make_sub<float>(), make_mul<float>(), make_prot_div<float>(),
+				op_sin, op_cos, op_exp, op_log, lit);
 	program->set_operations(builder.grab());
 }
 
 void setup_gp_system(const blt::size_t population_size)
 {
 	prog_config_t config{};
-	config.population_size = population_size;
-	config.elites = 2;
-	program = new gp_program{
-		[]() {
-			return std::random_device()();
-		},
-		config
-	};
+	config.set_pop_size(1);
+	config.set_elite_count(0);
+	config.set_thread_count(0);
+	// config.set_crossover_chance(0);
+	// config.set_mutation_chance(0);
+	// config.set_reproduction_chance(0);
+
+	const auto rand = std::random_device()();
+	BLT_INFO("Random Seed: {}", rand);
+	for (auto& program : programs)
+	{
+		program = new gp_program{rand, config};
+	}
+	setup_operations<struct p1>(programs[0]);
+	setup_operations<struct p2>(programs[1]);
+	setup_operations<struct p3>(programs[2]);
 
 	images.resize(population_size);
-	setup_operations();
+
 	static auto sel = select_tournament_t{};
-	program->generate_initial_population(program->get_typesystem().get_type<image_t>().id());
-	program->setup_generational_evaluation(fitness_func, sel, sel, sel);
+
+	for (const auto program : programs)
+		program->generate_initial_population(program->get_typesystem().get_type<image_t>().id());
+
+	programs[0]->setup_generational_evaluation(fitness_func<0>, sel, sel, sel);
+	programs[1]->setup_generational_evaluation(fitness_func<1>, sel, sel, sel);
+	programs[2]->setup_generational_evaluation(fitness_func<2>, sel, sel, sel);
 }
 
 void run_step()
 {
-	BLT_TRACE("------------\\{Begin Generation {}}------------", program->get_current_generation());
+	BLT_TRACE("------------\\{Begin Generation {}}------------", programs[0]->get_current_generation());
 	BLT_TRACE("Creating next generation");
-	program->create_next_generation();
+	for (const auto program : programs)
+		program->create_next_generation();
 	BLT_TRACE("Move to next generation");
-	program->next_generation();
+	for (const auto program : programs)
+		program->next_generation();
 	BLT_TRACE("Evaluate Fitness");
-	program->evaluate_fitness();
-	const auto& stats = program->get_population_stats();
-	BLT_TRACE("Avg Fit: {:0.6f}, Best Fit: {:0.6f}, Worst Fit: {:0.6f}, Overall Fit: {:0.6f}", stats.average_fitness.load(std::memory_order_relaxed),
-			stats.best_fitness.load(std::memory_order_relaxed), stats.worst_fitness.load(std::memory_order_relaxed),
-			stats.overall_fitness.load(std::memory_order_relaxed));
+	for (const auto program : programs)
+		program->evaluate_fitness();
+	for (const auto [i, program] : blt::enumerate(programs))
+	{
+		const auto& stats = program->get_population_stats();
+		if (i == 0)
+			BLT_TRACE("Channel Red");
+		else if (i == 1)
+			BLT_TRACE("Channel Green");
+		else
+			BLT_TRACE("Channel Blue");
+		BLT_TRACE("\tAvg Fit: {:0.6f}, Best Fit: {:0.6f}, Worst Fit: {:0.6f}, Overall Fit: {:0.6f}",
+				stats.average_fitness.load(std::memory_order_relaxed), stats.best_fitness.load(std::memory_order_relaxed),
+				stats.worst_fitness.load(std::memory_order_relaxed), stats.overall_fitness.load(std::memory_order_relaxed));
+	}
+
 	BLT_TRACE("----------------------------------------------");
 }
 
 bool should_terminate()
 {
-	return program->should_terminate();
+	return programs[0]->should_terminate() || programs[1]->should_terminate() || programs[2]->should_terminate();
 }
 
-image_storage_t& get_image(blt::size_t index)
+std::array<image_pixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3>& get_image(const blt::size_t index)
 {
 	return images[index];
 }
 
 void cleanup()
 {
-	delete program;
+	for (const auto program : programs)
+		delete program;
 }

@@ -27,7 +27,7 @@ void run_step();
 
 bool should_terminate();
 
-image_storage_t& get_image(blt::size_t index);
+std::array<image_pixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3>& get_image(blt::size_t index);
 
 void cleanup();
 
