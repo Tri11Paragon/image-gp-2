@@ -11,6 +11,9 @@
     <mapping directory="$PROJECT_DIR$/cmake-build-release/_deps/freetype-src" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-release/_deps/freetype-src/subprojects/dlg" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-release/_deps/imgui-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmake-build-relwithdebinfo-addrsan-alloc/_deps/freetype-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmake-build-relwithdebinfo-addrsan-alloc/_deps/freetype-src/subprojects/dlg" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmake-build-relwithdebinfo-addrsan-alloc/_deps/imgui-src" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-relwithdebinfo-addrsan/_deps/freetype-src" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-relwithdebinfo-addrsan/_deps/freetype-src/subprojects/dlg" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-relwithdebinfo-addrsan/_deps/imgui-src" vcs="Git" />

@@ -83,6 +83,12 @@ void setup_operations(gp_program* program)
 		}
 		return ret;
 	});
+	static auto op_image_noise = operation_t([program]() {
+		image_t ret{};
+		for (auto& v : ret.get_data().data)
+			v = program->get_random().get_float(0, 1.0f);
+		return ret;
+	}).set_ephemeral();
 	static auto op_image_ephemeral = operation_t([program]() {
 		image_t ret{};
 		const auto value = program->get_random().get_float();
@@ -175,6 +181,14 @@ void setup_operations(gp_program* program)
 										lacunarity + 2, gain + 0.5f, 1.0f, static_cast<int>(octaves));
 		return ret;
 	}, "perlin_image");
+	static operation_t op_image_perlin_bounded([](float octaves) {
+		octaves = std::min(std::max(octaves, 4.0f), 8.0f);
+		image_t ret{};
+		for (const auto& [i, out] : blt::enumerate(ret.get_data().data))
+			out = stb_perlin_fbm_noise3(static_cast<float>(i % IMAGE_DIMENSIONS) + 0.23423f, static_cast<float>(i / IMAGE_DIMENSIONS) + 0.6234f, 0.4861f,
+										2, 0.5, static_cast<int>(octaves));
+		return ret;
+	}, "perlin_image_bounded");
 	static operation_t op_sin([](const float a) {
 		return std::sin(a);
 	}, "sin_float");
@@ -198,7 +212,7 @@ void setup_operations(gp_program* program)
 	operator_builder builder{};
 	builder.build(op_image_ephemeral, make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y,
 				op_image_sin, op_image_gt, op_image_lt, op_image_cos, op_image_log, op_image_exp, op_image_or, op_image_and, op_image_xor,
-				op_image_not, op_image_perlin, make_add<float>(), make_sub<float>(), make_mul<float>(), make_prot_div<float>(), op_sin, op_cos,
+				op_image_not, op_image_perlin_bounded, op_image_blend, make_add<float>(), make_sub<float>(), make_mul<float>(), make_prot_div<float>(), op_sin, op_cos,
 				op_exp, op_log, lit);
 	program->set_operations(builder.grab());
 }
