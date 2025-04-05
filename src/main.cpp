@@ -49,6 +49,9 @@ void init(const blt::gfx::window_data&)
 		gl_images.push_back(texture);
 		resources.set(std::to_string(i), texture);
 	}
+	const auto texture = new texture_gl2D(IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGBA8);
+	texture->upload(to_gl_image(get_reference_image()).data(), IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGB, GL_FLOAT);
+	resources.set("reference", texture);
 	global_matrices.create_internals();
 	resources.load_resources();
 	renderer_2d.create();
@@ -58,6 +61,9 @@ void init(const blt::gfx::window_data&)
 
 void update(const blt::gfx::window_data& data)
 {
+	constexpr float side_bar_width = 250;
+	static float top_bar_height = 0;
+
 	global_matrices.update_perspectives(data.width, data.height, 90, 0.1, 2000);
 
 	camera.update();
@@ -75,11 +81,11 @@ void update(const blt::gfx::window_data& data)
 	// Create the tab bar
 	if (ImGui::BeginTabBar("MainTabs"))
 	{
+		top_bar_height = ImGui::GetFrameHeight();
 		// 1. Run GP tab
 		if (ImGui::BeginTabItem("Run GP"))
 		{
-			// Left child - fixed width (250px)
-			ImGui::BeginChild("ControlPanel", ImVec2(250, 0), true);
+			ImGui::BeginChild("ControlPanel", ImVec2(side_bar_width, 0), true);
 			{
 				ImGui::Text("Control Panel");
 				ImGui::Separator();
@@ -94,7 +100,24 @@ void update(const blt::gfx::window_data& data)
 			// Right child - take the remaining space
 			ImGui::SameLine();
 			// ImGui::BeginChild("MainContent", ImVec2(0, 0), false, ImGuiWindowFlags_NoBackground);
-			{}
+			{
+				constexpr int images_x = 10;
+				constexpr int images_y = 6;
+				for (int i = 0; i < images_x; i++)
+				{
+					for (int j = 0; j < images_y; j++)
+					{
+						constexpr float padding_x = 32;
+						constexpr float padding_y = 32;
+						const float img_width = (static_cast<float>(data.width) - padding_x * 2 - padding_x * (images_x - 1) - 256) / images_x;
+						const float img_height = (static_cast<float>(data.height) - padding_y * 2 - padding_y * (images_y - 1) - 32) / images_y;
+						const float x = 256 + static_cast<float>(i) * img_width + padding_x * static_cast<float>(i) + img_width;
+						const float y = static_cast<float>(data.height) - (16 + static_cast<float>(j) * img_height + padding_y * static_cast<float>(j) +
+							img_height);
+						renderer_2d.drawRectangle(blt::gfx::rectangle2d_t{x, y, img_width, img_height}, std::to_string(i * images_y + j));
+					}
+				}
+			}
 			// ImGui::EndChild();
 
 			ImGui::EndTabItem();
@@ -113,6 +136,14 @@ void update(const blt::gfx::window_data& data)
 		{
 			ImGui::Text("Here you can view statistics.");
 			// Additional UI for statistical data
+			ImGui::EndTabItem();
+		}
+
+		if (ImGui::BeginTabItem("Reference"))
+		{
+			auto w = data.width;
+			auto h = data.height - top_bar_height - 10;
+			renderer_2d.drawRectangle({w/2, h/2, w, h}, "reference");
 			ImGui::EndTabItem();
 		}
 
@@ -151,23 +182,6 @@ void update(const blt::gfx::window_data& data)
 			pixel = (pixel - min) / (max - min);
 
 		gl_images[i]->upload(get_image(i).data(), IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGB, GL_FLOAT);
-	}
-
-	constexpr int images_x = 10;
-	constexpr int images_y = 6;
-	for (int i = 0; i < images_x; i++)
-	{
-		for (int j = 0; j < images_y; j++)
-		{
-			constexpr float padding_x = 32;
-			constexpr float padding_y = 32;
-			const float img_width = (static_cast<float>(data.width) - padding_x * 2 - padding_x * (images_x - 1) - 256) / images_x;
-			const float img_height = (static_cast<float>(data.height) - padding_y * 2 - padding_y * (images_y - 1) - 32) / images_y;
-			const float x = 256 + static_cast<float>(i) * img_width + padding_x * static_cast<float>(i) + img_width;
-			const float y = static_cast<float>(data.height) - (16 + static_cast<float>(j) * img_height + padding_y * static_cast<float>(j) +
-				img_height);
-			renderer_2d.drawRectangle(blt::gfx::rectangle2d_t{x, y, img_width, img_height}, std::to_string(i * images_y + j));
-		}
 	}
 
 	renderer_2d.render(data.width, data.height);

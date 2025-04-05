@@ -48,9 +48,28 @@ std::array<image_storage_t, 3> image_storage_t::from_file(const std::string& pat
 	return {storage_r, storage_g, storage_b};
 }
 
+void image_storage_t::normalize()
+{
+	float min = std::numeric_limits<float>::max();
+	float max = std::numeric_limits<float>::min();
+
+	for (auto& pixel : data)
+	{
+		if (std::isnan(pixel) || std::isinf(pixel))
+			pixel = 0;
+		if (pixel > max)
+			max = pixel;
+		if (pixel < min)
+			min = pixel;
+	}
+
+	for (auto& pixel : data)
+		pixel = (pixel - min) / (max - min);
+}
+
 image_t operator/(const image_t& lhs, const image_t& rhs)
 {
-	const image_t ret;
+	const image_t ret{};
 	for (auto [ref, l, r] : blt::zip(ret.data->data, lhs.data->data, rhs.data->data))
 		ref = blt::f_equal(r, 0) ? 0 : l / r;
 	return ret;
@@ -58,7 +77,7 @@ image_t operator/(const image_t& lhs, const image_t& rhs)
 
 image_t operator*(const image_t& lhs, const image_t& rhs)
 {
-	const image_t ret;
+	const image_t ret{};
 	for (auto [ref, l, r] : blt::zip(ret.data->data, lhs.data->data, rhs.data->data))
 		ref = l * r;
 	return ret;
@@ -66,7 +85,7 @@ image_t operator*(const image_t& lhs, const image_t& rhs)
 
 image_t operator-(const image_t& lhs, const image_t& rhs)
 {
-	const image_t ret;
+	const image_t ret{};
 	for (auto [ref, l, r] : blt::zip(ret.data->data, lhs.data->data, rhs.data->data))
 		ref = l - r;
 	return ret;
@@ -74,7 +93,7 @@ image_t operator-(const image_t& lhs, const image_t& rhs)
 
 image_t operator+(const image_t& lhs, const image_t& rhs)
 {
-	const image_t ret;
+	const image_t ret{};
 	for (auto [ref, l, r] : blt::zip(ret.data->data, lhs.data->data, rhs.data->data))
 		ref = l + r;
 	return ret;

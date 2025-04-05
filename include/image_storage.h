@@ -25,6 +25,7 @@
 #include <blt/logging/logging.h>
 #include <blt/std/types.h>
 #include <mutex>
+#include <blt/std/hashmap.h>
 
 using image_pixel_t = float;
 constexpr blt::i32 IMAGE_DIMENSIONS = 256;
@@ -49,6 +50,8 @@ struct image_storage_t
 	{
 		return data[(y * IMAGE_DIMENSIONS + x) * IMAGE_CHANNELS];
 	}
+
+	void normalize();
 };
 
 inline std::atomic_uint64_t g_allocated_blocks = 0;
@@ -68,11 +71,10 @@ struct image_cleaner_t
 };
 
 inline image_cleaner_t g_image_list;
-inline std::atomic_uint64_t g_image_counter = 0;
 
 struct image_t
 {
-	image_t(): id(++g_image_counter)
+	explicit image_t()
 	{
 		image_storage_t* front = nullptr;
 		{
@@ -88,13 +90,7 @@ struct image_t
 		else
 			data = new image_storage_t;
 		++g_allocated_blocks;
-
-		BLT_TRACE("Allocated {}!", id);
 	}
-
-	image_t(const image_t& other) = default;
-
-	image_t& operator=(const image_t& other) = default;
 
 	void drop()
 	{
@@ -104,7 +100,6 @@ struct image_t
 		}
 		data = nullptr;
 		++g_deallocated_blocks;
-		BLT_TRACE("Deallocated {}!", id);
 	}
 
 	[[nodiscard]] void* as_void_const() const
@@ -115,6 +110,11 @@ struct image_t
 	[[nodiscard]] void* as_void() const
 	{
 		return data->data.data();
+	}
+
+	void normalize() const
+	{
+		data->normalize();
 	}
 
 	friend image_t operator+(const image_t& lhs, const image_t& rhs);
@@ -137,7 +137,6 @@ struct image_t
 
 private:
 	image_storage_t* data;
-	blt::size_t id;
 };
 
 #endif //IMAGE_STORAGE_H

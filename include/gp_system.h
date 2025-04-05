@@ -31,4 +31,8 @@ std::array<image_pixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3>& get_image(bl
 
 void cleanup();
 
+std::array<image_storage_t, 3>& get_reference_image();
+
+std::array<image_pixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3> to_gl_image(const std::array<image_storage_t, 3>& image);
+
 #endif //GP_SYSTEM_H

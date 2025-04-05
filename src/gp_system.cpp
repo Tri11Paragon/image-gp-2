@@ -21,8 +21,16 @@
 #include <operations.h>
 #include <random>
 #include "opencv2/imgcodecs.hpp"
+#include <stb_perlin.h>
 
 using namespace blt::gp;
+
+float filter_nan(const float f)
+{
+	if (std::isnan(f) || std::isinf(f) || std::isinf(-f))
+		return 0.0f;
+	return f;
+}
 
 std::array<gp_program*, 3> programs;
 
@@ -33,6 +41,7 @@ template <size_t Channel>
 void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t index)
 {
 	auto image = tree.get_evaluation_ref<image_t>();
+	image->normalize();
 
 	// std::memcpy(images[index].data.data(), image->get_data().data.data(), IMAGE_SIZE_BYTES);
 	auto& data = image->get_data();
@@ -44,8 +53,8 @@ void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t inde
 
 			auto multiplier = (1 - std::abs((static_cast<float>(x) / (static_cast<float>(IMAGE_DIMENSIONS) / 2)) - 1)) + (1 - std::abs(
 				(static_cast<float>(y) / (static_cast<float>(IMAGE_DIMENSIONS) / 2)) - 1));
-			const auto diff = data.get(x, y) - reference_image[Channel].get(x, y);
-			fitness.raw_fitness += (diff * diff) * multiplier;
+			const auto diff = filter_nan(data.get(x, y)) - reference_image[Channel].get(x, y);
+			fitness.raw_fitness += diff * diff * multiplier;
 		}
 	}
 	fitness.raw_fitness /= static_cast<float>(IMAGE_SIZE_CHANNELS);
@@ -57,7 +66,7 @@ template <typename T>
 void setup_operations(gp_program* program)
 {
 	static operation_t op_image_x([]() {
-		image_t ret;
+		image_t ret{};
 		for (blt::size_t x = 0; x < IMAGE_DIMENSIONS; ++x)
 		{
 			for (blt::size_t y = 0; y < IMAGE_DIMENSIONS; ++y)
@@ -66,7 +75,7 @@ void setup_operations(gp_program* program)
 		return ret;
 	});
 	static operation_t op_image_y([]() {
-		image_t ret;
+		image_t ret{};
 		for (blt::size_t x = 0; x < IMAGE_DIMENSIONS; ++x)
 		{
 			for (blt::size_t y = 0; y < IMAGE_DIMENSIONS; ++y)
@@ -75,47 +84,97 @@ void setup_operations(gp_program* program)
 		return ret;
 	});
 	static auto op_image_ephemeral = operation_t([program]() {
-		image_t ret;
+		image_t ret{};
 		const auto value = program->get_random().get_float();
 		for (auto& v : ret.get_data().data)
 			v = value;
 		return ret;
 	}).set_ephemeral();
-	static operation_t op_image_blend([](const image_t& a, const image_t& b, const float f) {
+	static operation_t op_image_blend([](const image_t a, const image_t b, const float f) {
 		const auto blend = std::min(std::max(f, 0.0f), 1.0f);
 		const auto beta = 1.0f - blend;
-		image_t ret;
-		const cv::Mat src1{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32FC1, a.as_void()};
-		const cv::Mat src2{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32FC1, b.as_void()};
-		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32FC1, ret.get_data().data.data()};
+		image_t ret{};
+		const cv::Mat src1{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, a.as_void_const()};
+		const cv::Mat src2{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, b.as_void_const()};
+		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, ret.get_data().data.data()};
 		addWeighted(src1, blend, src2, beta, 0.0, dst);
 		return ret;
 	}, "blend_image");
-	static operation_t op_image_sin([](const image_t& a) {
-		image_t ret;
+	static operation_t op_image_sin([](const image_t a) {
+		image_t ret{};
 		for (const auto& [i, v] : blt::enumerate(std::as_const(a.get_data().data)))
-			ret.get_data().data[i] = std::sin(v);
+			ret.get_data().data[i] = filter_nan(std::sin(v));
 		return ret;
 	}, "sin_image");
-	static operation_t op_image_cos([](const image_t& a) {
-		image_t ret;
+	static operation_t op_image_cos([](const image_t a) {
+		image_t ret{};
 		for (const auto& [i, v] : blt::enumerate(std::as_const(a.get_data().data)))
-			ret.get_data().data[i] = std::cos(v);
+			ret.get_data().data[i] = filter_nan(std::cos(v));
 		return ret;
 	}, "cos_image");
-	static operation_t op_image_log([](const image_t& a) {
-		image_t ret;
+	static operation_t op_image_log([](const image_t a) {
+		image_t ret{};
 		for (const auto& [i, v] : blt::enumerate(std::as_const(a.get_data().data)))
 		{
 			if (blt::f_equal(v, 0))
 				ret.get_data().data[i] = 0;
 			else if (v < 0)
-				ret.get_data().data[i] = -std::log(-v);
+				ret.get_data().data[i] = -filter_nan(std::log(-v));
 			else
-				ret.get_data().data[i] = std::log(v);
+				ret.get_data().data[i] = filter_nan(std::log(v));
 		}
 		return ret;
-	}, "sin_image");
+	}, "log_image");
+	static operation_t op_image_exp([](const image_t a) {
+		image_t ret{};
+		for (const auto& [i, v] : blt::enumerate(std::as_const(a.get_data().data)))
+			ret.get_data().data[i] = filter_nan(std::exp(v));
+		return ret;
+	}, "exp_image");
+	static operation_t op_image_or([](const image_t a, const image_t b) {
+		image_t ret{};
+		for (const auto& [i, av, bv] : blt::in_pairs(std::as_const(a.get_data().data), std::as_const(b.get_data().data)).enumerate().flatten())
+			ret.get_data().data[i] = blt::mem::type_cast<float>(blt::mem::type_cast<blt::u32>(av) | blt::mem::type_cast<blt::u32>(bv));
+		return ret;
+	}, "bit_or_image");
+	static operation_t op_image_and([](const image_t a, const image_t b) {
+		image_t ret{};
+		for (const auto& [i, av, bv] : blt::in_pairs(std::as_const(a.get_data().data), std::as_const(b.get_data().data)).enumerate().flatten())
+			ret.get_data().data[i] = blt::mem::type_cast<float>(blt::mem::type_cast<blt::u32>(av) & blt::mem::type_cast<blt::u32>(bv));
+		return ret;
+	}, "bit_and_image");
+	static operation_t op_image_xor([](const image_t a, const image_t b) {
+		image_t ret{};
+		for (const auto& [i, av, bv] : blt::in_pairs(std::as_const(a.get_data().data), std::as_const(b.get_data().data)).enumerate().flatten())
+			ret.get_data().data[i] = blt::mem::type_cast<float>(blt::mem::type_cast<blt::u32>(av) ^ blt::mem::type_cast<blt::u32>(bv));
+		return ret;
+	}, "bit_xor_image");
+	static operation_t op_image_not([](const image_t a, const image_t b) {
+		image_t ret{};
+		for (const auto& [i, av, bv] : blt::in_pairs(std::as_const(a.get_data().data), std::as_const(b.get_data().data)).enumerate().flatten())
+			ret.get_data().data[i] = blt::mem::type_cast<float>(~blt::mem::type_cast<blt::u32>(av));
+		return ret;
+	}, "bit_not_image");
+	static operation_t op_image_gt([](const image_t a, const image_t b) {
+		image_t ret{};
+		for (const auto& [i, av, bv] : blt::in_pairs(std::as_const(a.get_data().data), std::as_const(b.get_data().data)).enumerate().flatten())
+			ret.get_data().data[i] = av > bv ? av : bv;
+		return ret;
+	}, "gt_image");
+	static operation_t op_image_lt([](const image_t a, const image_t b) {
+		image_t ret{};
+		for (const auto& [i, av, bv] : blt::in_pairs(std::as_const(a.get_data().data), std::as_const(b.get_data().data)).enumerate().flatten())
+			ret.get_data().data[i] = av < bv ? av : bv;
+		return ret;
+	}, "lt_image");
+	static operation_t op_image_perlin([](const float ofx, const float ofy, const float ofz, const float lacunarity, const float gain,
+										const float octaves) {
+		image_t ret{};
+		for (const auto& [i, out] : blt::enumerate(ret.get_data().data))
+			out = stb_perlin_ridge_noise3(static_cast<float>(i % IMAGE_DIMENSIONS) + ofx, static_cast<float>(i / IMAGE_DIMENSIONS) + ofy, ofz,
+										lacunarity + 2, gain + 0.5f, 1.0f, static_cast<int>(octaves));
+		return ret;
+	}, "perlin_image");
 	static operation_t op_sin([](const float a) {
 		return std::sin(a);
 	}, "sin_float");
@@ -137,18 +196,20 @@ void setup_operations(gp_program* program)
 	}, "lit_float").set_ephemeral();
 
 	operator_builder builder{};
-	builder.build(make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y, op_image_sin,
-				 op_image_cos, op_image_log, make_add<float>(), make_sub<float>(), make_mul<float>(), make_prot_div<float>(),
-				op_sin, op_cos, op_exp, op_log, lit);
+	builder.build(op_image_ephemeral, make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y,
+				op_image_sin, op_image_gt, op_image_lt, op_image_cos, op_image_log, op_image_exp, op_image_or, op_image_and, op_image_xor,
+				op_image_not, op_image_perlin, make_add<float>(), make_sub<float>(), make_mul<float>(), make_prot_div<float>(), op_sin, op_cos,
+				op_exp, op_log, lit);
 	program->set_operations(builder.grab());
 }
 
 void setup_gp_system(const blt::size_t population_size)
 {
 	prog_config_t config{};
-	config.set_pop_size(1);
-	config.set_elite_count(0);
+	config.set_pop_size(population_size);
+	config.set_elite_count(2);
 	config.set_thread_count(0);
+	config.set_reproduction_chance(0);
 	// config.set_crossover_chance(0);
 	// config.set_mutation_chance(0);
 	// config.set_reproduction_chance(0);
@@ -218,4 +279,24 @@ void cleanup()
 {
 	for (const auto program : programs)
 		delete program;
+}
+
+std::array<image_storage_t, 3>& get_reference_image()
+{
+	return reference_image;
+}
+
+std::array<image_pixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3> to_gl_image(const std::array<image_storage_t, 3>& image)
+{
+	std::array<image_pixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3> image_data{};
+	for (blt::size_t x = 0; x < IMAGE_DIMENSIONS; ++x)
+	{
+		for (blt::size_t y = 0; y < IMAGE_DIMENSIONS; ++y)
+		{
+			image_data[(x * IMAGE_DIMENSIONS + y) * 3 + 0] = image[0].get(x, y);
+			image_data[(x * IMAGE_DIMENSIONS + y) * 3 + 1] = image[1].get(x, y);
+			image_data[(x * IMAGE_DIMENSIONS + y) * 3 + 2] = image[2].get(x, y);
+		}
+	}
+	return image_data;
 }
