@@ -27,6 +27,14 @@ void run_step();
 
 bool should_terminate();
 
+blt::u32 get_generation();
+
+void reset_programs();
+
+void regenerate_image(blt::size_t index, float& image_storage, blt::i32 width, blt::i32 height);
+
+void set_population_size(blt::u32 size);
+
 std::array<image_pixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3>& get_image(blt::size_t index);
 
 void cleanup();
