@@ -27,8 +27,12 @@
 #include <mutex>
 #include <blt/std/hashmap.h>
 
+#ifndef BLT_IMAGE_SIZE
+#define BLT_IMAGE_SIZE 256
+#endif
+
 using image_pixel_t = float;
-constexpr blt::i32 IMAGE_DIMENSIONS = 256;
+constexpr blt::i32 IMAGE_DIMENSIONS = BLT_IMAGE_SIZE;
 constexpr blt::i32 IMAGE_CHANNELS = 1;
 
 constexpr blt::size_t IMAGE_SIZE = IMAGE_DIMENSIONS * IMAGE_DIMENSIONS;
