@@ -191,7 +191,7 @@ void update(const blt::gfx::window_data& data)
 
 		if (ImGui::BeginTabItem("Reference"))
 		{
-			auto w = data.width;
+			blt::f32 w = data.width;
 			auto h = data.height - top_bar_height - 10;
 			renderer_2d.drawRectangle({static_cast<blt::f32>(w / 2), h / 2, w, h}, "reference");
 			ImGui::EndTabItem();
@@ -241,24 +241,7 @@ void update(const blt::gfx::window_data& data)
 
 	for (blt::size_t i = 0; i < population_size; i++)
 	{
-		auto& image = get_image(i);
-		float min = std::numeric_limits<float>::max();
-		float max = std::numeric_limits<float>::min();
-
-		for (auto& pixel : image)
-		{
-			if (std::isnan(pixel) || std::isinf(pixel))
-				pixel = 0;
-			if (pixel > max)
-				max = pixel;
-			if (pixel < min)
-				min = pixel;
-		}
-
-		for (auto& pixel : image)
-			pixel = (pixel - min) / (max - min);
-
-		gl_images[i]->upload(get_image(i).data(), IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGB, GL_FLOAT);
+		gl_images[i]->upload(get_image(i).data(), IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGB, GL_UNSIGNED_INT);
 	}
 
 	if ((blt::gfx::isMousePressed(0) && blt::gfx::mousePressedLastFrame() && !clicked_on_image) || (blt::gfx::isKeyPressed(GLFW_KEY_ESCAPE) && blt::gfx::keyPressedLastFrame()))

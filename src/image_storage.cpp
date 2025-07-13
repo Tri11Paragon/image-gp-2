@@ -48,6 +48,12 @@ std::array<image_storage_t, 3> image_storage_t::from_file(const std::string& pat
 	return {storage_r, storage_g, storage_b};
 }
 
+std::array<image_storage_t, 3> image_istorage_t::from_file(const std::string& path)
+{}
+
+void image_istorage_t::normalize()
+{}
+
 void image_storage_t::normalize()
 {
 	float min = std::numeric_limits<float>::max();

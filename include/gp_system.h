@@ -35,7 +35,7 @@ void regenerate_image(blt::size_t index, float& image_storage, blt::i32 width, b
 
 void set_population_size(blt::u32 size);
 
-std::array<image_pixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3>& get_image(blt::size_t index);
+std::array<image_ipixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3>& get_image(blt::size_t index);
 
 void cleanup();
 

@@ -28,6 +28,7 @@
 #include <blt/std/hashmap.h>
 
 using image_pixel_t = float;
+using image_ipixel_t = blt::u32;
 constexpr blt::i32 IMAGE_DIMENSIONS = 256;
 constexpr blt::i32 IMAGE_CHANNELS = 1;
 
@@ -54,6 +55,25 @@ struct image_storage_t
 	void normalize();
 };
 
+struct image_istorage_t
+{
+	std::array<image_ipixel_t, IMAGE_SIZE_CHANNELS> data;
+
+	static std::array<image_storage_t, 3> from_file(const std::string& path);
+
+	image_ipixel_t& get(const blt::size_t x, const blt::size_t y)
+	{
+		return data[(y * IMAGE_DIMENSIONS + x) * IMAGE_CHANNELS];
+	}
+
+	[[nodiscard]] const image_ipixel_t& get(const blt::size_t x, const blt::size_t y) const
+	{
+		return data[(y * IMAGE_DIMENSIONS + x) * IMAGE_CHANNELS];
+	}
+
+	void normalize();
+};
+
 inline std::atomic_uint64_t g_allocated_blocks = 0;
 inline std::atomic_uint64_t g_deallocated_blocks = 0;
 
@@ -67,7 +87,7 @@ struct image_cleaner_t
 			delete v;
 	}
 
-	std::vector<image_storage_t*> images;
+	std::vector<image_istorage_t*> images;
 };
 
 inline image_cleaner_t g_image_list;
@@ -76,7 +96,7 @@ struct image_t
 {
 	explicit image_t()
 	{
-		image_storage_t* front = nullptr;
+		image_istorage_t* front = nullptr;
 		{
 			std::scoped_lock lock(g_image_list_mutex);
 			if (!g_image_list.images.empty())
@@ -88,7 +108,7 @@ struct image_t
 		if (front)
 			data = front;
 		else
-			data = new image_storage_t;
+			data = new image_istorage_t{};
 		++g_allocated_blocks;
 	}
 
@@ -125,18 +145,18 @@ struct image_t
 
 	friend image_t operator/(const image_t& lhs, const image_t& rhs);
 
-	image_storage_t& get_data()
+	image_istorage_t& get_data()
 	{
 		return *data;
 	}
 
-	[[nodiscard]] const image_storage_t& get_data() const
+	[[nodiscard]] const image_istorage_t& get_data() const
 	{
 		return *data;
 	}
 
 private:
-	image_storage_t* data;
+	image_istorage_t* data;
 };
 
 #endif //IMAGE_STORAGE_H
