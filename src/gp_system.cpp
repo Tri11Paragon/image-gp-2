@@ -25,10 +25,15 @@
 
 using namespace blt::gp;
 
-float filter_nan(const float f)
+bool is_nan(const float f)
 {
-	if (std::isnan(f) || std::isinf(f) || std::isinf(-f))
-		return 0.0f;
+	return std::isnan(f) || std::isinf(f) || std::isinf(-f);
+}
+
+float filter_nan(const float f, const float failure = 0.0f)
+{
+	if (is_nan(f))
+		return failure;
 	return f;
 }
 
@@ -37,6 +42,11 @@ prog_config_t config{};
 
 std::vector<std::array<image_pixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3>> images;
 auto reference_image = image_storage_t::from_file("../silly.png");
+
+std::vector<float> average_fitness;
+std::vector<float> best_fitness;
+std::vector<float> worst_fitness;
+std::vector<float> overall_fitness;
 
 template <size_t Channel>
 void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t index)
@@ -54,13 +64,18 @@ void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t inde
 
 			auto multiplier = (1 - std::abs((static_cast<float>(x) / (static_cast<float>(IMAGE_DIMENSIONS) / 2)) - 1)) + (1 - std::abs(
 				(static_cast<float>(y) / (static_cast<float>(IMAGE_DIMENSIONS) / 2)) - 1));
-			const auto diff = filter_nan(data.get(x, y)) - reference_image[Channel].get(x, y);
-			fitness.raw_fitness += diff * diff * multiplier;
+			auto our = data.get(x, y);
+			auto our2 = blt::mem::type_cast<blt::u32>(our);
+			auto our3 = static_cast<double>(our2) / static_cast<double>(std::numeric_limits<blt::u32>::max());
+			auto theirs = reference_image[Channel].get(x, y);
+			const auto diff = std::pow(our3, 1.0f/2.2f) - std::pow(theirs, 1.0f/2.2f);
+			fitness.raw_fitness += static_cast<float>(diff * multiplier);
 		}
 	}
-	fitness.raw_fitness /= static_cast<float>(IMAGE_SIZE_CHANNELS);
+	// fitness.raw_fitness /= static_cast<float>(IMAGE_SIZE_CHANNELS);
+	fitness.raw_fitness = static_cast<float>(std::sqrt(fitness.raw_fitness));
 	fitness.standardized_fitness = fitness.raw_fitness;
-	fitness.adjusted_fitness = -fitness.standardized_fitness;
+	fitness.adjusted_fitness = 1 - 1 / (1 + fitness.standardized_fitness);
 }
 
 template <typename T>
@@ -271,6 +286,16 @@ void run_step()
 			BLT_TRACE("Channel Green");
 		else
 			BLT_TRACE("Channel Blue");
+		const auto avg = stats.average_fitness.load(std::memory_order_relaxed);
+		const auto best = stats.best_fitness.load(std::memory_order_relaxed);
+		const auto worst = stats.worst_fitness.load(std::memory_order_relaxed);
+		const auto overall = stats.overall_fitness.load(std::memory_order_relaxed);
+
+		average_fitness.push_back(static_cast<float>(avg));
+		best_fitness.push_back(static_cast<float>(best));
+		worst_fitness.push_back(static_cast<float>(worst));
+		overall_fitness.push_back(static_cast<float>(overall));
+
 		BLT_TRACE("\tAvg Fit: {:0.6f}, Best Fit: {:0.6f}, Worst Fit: {:0.6f}, Overall Fit: {:0.6f}",
 				stats.average_fitness.load(std::memory_order_relaxed), stats.best_fitness.load(std::memory_order_relaxed),
 				stats.worst_fitness.load(std::memory_order_relaxed), stats.overall_fitness.load(std::memory_order_relaxed));
@@ -339,4 +364,9 @@ void reset_programs()
 void regenerate_image(blt::size_t index, float& image_storage, blt::i32 width, blt::i32 height)
 {
 
+}
+
+std::tuple<const std::vector<float>&, const std::vector<float>&, const std::vector<float>&, const std::vector<float>&> get_fitness_history()
+{
+	return {average_fitness, best_fitness, worst_fitness, overall_fitness};
 }

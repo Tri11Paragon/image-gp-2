@@ -6,8 +6,7 @@
 #include "blt/gfx/renderer/camera.h"
 #include <imgui.h>
 #include <thread>
-
-#include "../cmake-build-release-examples/_deps/imgui-src/imgui_internal.h"
+#include <implot.h>
 
 blt::gfx::matrix_state_manager global_matrices;
 blt::gfx::resource_manager resources;
@@ -58,6 +57,7 @@ std::thread run_gp()
 
 void init(const blt::gfx::window_data&)
 {
+	ImPlot::CreateContext();
 	using namespace blt::gfx;
 
 	for (blt::size_t i = 0; i < population_size; i++)
@@ -193,7 +193,7 @@ void update(const blt::gfx::window_data& data)
 		{
 			auto w = data.width;
 			auto h = data.height - top_bar_height - 10;
-			renderer_2d.drawRectangle({w / 2, h / 2, w, h}, "reference");
+			renderer_2d.drawRectangle({static_cast<blt::f32>(w / 2), h / 2, w, h}, "reference");
 			ImGui::EndTabItem();
 		}
 
@@ -201,6 +201,33 @@ void update(const blt::gfx::window_data& data)
 	}
 
 	ImGui::End(); // MainWindow
+
+	// if (ImGui::Begin("Fitness"))
+	// {
+	// 	const auto& [average, best, worst, overall] = get_fitness_history();
+	//
+	// 	if (ImPlot::BeginPlot("Average Fitness", ImVec2{-1, 0}, ImPlotFlags_NoInputs))
+	// 	{
+	// 		ImPlot::PlotLine("Average Fitness", average.data(), static_cast<blt::i32>(average.size()));
+	// 		ImPlot::EndPlot();
+	// 	}
+	// 	if (ImPlot::BeginPlot("Best Fitness", ImVec2{-1, 0}, ImPlotFlags_NoInputs))
+	// 	{
+	// 		ImPlot::PlotLine("Best Fitness", best.data(), static_cast<blt::i32>(best.size()));
+	// 		ImPlot::EndPlot();
+	// 	}
+	// 	if (ImPlot::BeginPlot("Worst Fitness", ImVec2{-1, 0}, ImPlotFlags_NoInputs))
+	// 	{
+	// 		ImPlot::PlotLine("Worst Fitness", worst.data(), static_cast<blt::i32>(worst.size()));
+	// 		ImPlot::EndPlot();
+	// 	}
+	// 	if (ImPlot::BeginPlot("Overall Fitness", ImVec2{-1, 0}, ImPlotFlags_NoInputs))
+	// 	{
+	// 		ImPlot::PlotLine("Overall Fitness", overall.data(), static_cast<blt::i32>(overall.size()));
+	// 		ImPlot::EndPlot();
+	// 	}
+	// }
+	// ImGui::End();
 
 	if (ImGui::Begin("Debug"))
 	{

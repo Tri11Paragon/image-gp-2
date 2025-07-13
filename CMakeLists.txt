@@ -18,9 +18,11 @@ include_directories( ${OpenCV_INCLUDE_DIRS} )
 include_directories(lib/stb)
 
 include_directories(include/)
+include_directories(lib/implot)
 file(GLOB_RECURSE PROJECT_BUILD_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+file(GLOB IMPLOT_BUILD_FILES "${CMAKE_CURRENT_SOURCE_DIR}/lib/implot/*.cpp")
 
-add_executable(image-gp-2 ${PROJECT_BUILD_FILES})
+add_executable(image-gp-2 ${PROJECT_BUILD_FILES} ${IMPLOT_BUILD_FILES})
 
 target_compile_options(image-gp-2 PRIVATE -Wall -Wextra -Wpedantic -Wno-comment)
 target_link_options(image-gp-2 PRIVATE -Wall -Wextra -Wpedantic -Wno-comment)

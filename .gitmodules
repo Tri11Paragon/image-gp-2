@@ -16,3 +16,6 @@
 [submodule "lib/lockfree"]
 	path = lib/lockfree
 	url = https://github.com/bhhbazinga/LockFreeLinkedList.git
+[submodule "lib/implot"]
+	path = lib/implot
+	url = https://github.com/epezent/implot.git
