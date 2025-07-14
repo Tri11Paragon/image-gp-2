@@ -7,6 +7,7 @@
 #include <imgui.h>
 #include <thread>
 #include <implot.h>
+#include <blt/gp/tree.h>
 
 blt::gfx::matrix_state_manager global_matrices;
 blt::gfx::resource_manager resources;
@@ -97,6 +98,7 @@ void update(const blt::gfx::window_data& data)
 
 	static blt::i32 image_to_enlarge = -1;
 	bool clicked_on_image = false;
+	static bool show_best = false;
 
 	// Create the tab bar
 	if (ImGui::BeginTabBar("MainTabs"))
@@ -108,6 +110,7 @@ void update(const blt::gfx::window_data& data)
 		static int images_y = 6;
 		static bool run_gp = false;
 		static int generation_limit = 0;
+		static int min_between_runs = 100;
 
 		if (ImGui::BeginTabItem("Run GP"))
 		{
@@ -121,8 +124,10 @@ void update(const blt::gfx::window_data& data)
 				if (ImGui::InputInt("Images X", &images_x) || ImGui::InputInt("Images Y", &images_y))
 					update_population_size(images_x * images_y);
 				ImGui::InputInt("Generation Limit", &generation_limit);
-				if (run_gp && (generation_limit == 0 || get_generation() < generation_limit))
+				if (run_gp && (generation_limit == 0 || get_generation() < static_cast<blt::u32>(generation_limit)))
 					run_generation = true;
+				ImGui::InputInt("Min Time Between Runs (ms)", &min_between_runs);
+				ImGui::Checkbox("Show Best", &show_best);
 			}
 			ImGui::EndChild();
 
@@ -246,6 +251,19 @@ void update(const blt::gfx::window_data& data)
 
 	if ((blt::gfx::isMousePressed(0) && blt::gfx::mousePressedLastFrame() && !clicked_on_image) || (blt::gfx::isKeyPressed(GLFW_KEY_ESCAPE) && blt::gfx::keyPressedLastFrame()))
 		image_to_enlarge = -1;
+
+	if (show_best)
+	{
+		auto best_images = get_best_image_index();
+		for (const auto [i, best_image] : blt::enumerate(best_images))
+		{
+			const auto width = std::min(static_cast<float>(data.width) - side_bar_width, static_cast<float>(256) * 3) / 3;
+			const auto height = std::min(static_cast<float>(data.height) - top_bar_height, static_cast<float>(256) * 3) / 3;
+			renderer_2d.drawRectangle(blt::gfx::rectangle2d_t{blt::gfx::anchor_t::BOTTOM_LEFT,
+									side_bar_width + 256 + i * width, 64, width, height
+								}, std::to_string(best_image), 1);
+		}
+	}
 
 	if (image_to_enlarge != -1)
 	{

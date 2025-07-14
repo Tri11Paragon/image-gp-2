@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(image-gp-2 VERSION 0.0.11)
+project(image-gp-2 VERSION 0.0.12)
 
 option(ENABLE_ADDRSAN "Enable the address sanitizer" OFF)
 option(ENABLE_UBSAN "Enable the ub sanitizer" OFF)
@@ -13,6 +13,13 @@ add_subdirectory(lib/blt-gp)
 add_subdirectory(lib/FastNoise2)
 
 find_package(OpenCV REQUIRED)
+
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+if(COMPILER_SUPPORTS_MARCH_NATIVE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+endif()
+
 
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 include_directories(lib/stb)

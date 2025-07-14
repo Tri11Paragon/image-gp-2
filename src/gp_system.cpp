@@ -21,6 +21,7 @@
 #include <operations.h>
 #include <random>
 #include "opencv2/imgcodecs.hpp"
+#include "opencv2/imgproc.hpp"
 #include <stb_perlin.h>
 
 using namespace blt::gp;
@@ -236,6 +237,29 @@ void setup_operations(gp_program* program)
 	static auto lit = operation_t([program]() {
 		return program->get_random().get_float(-1.0f, 1.0f);
 	}, "lit_float").set_ephemeral();
+	static operation_t op_erode([](const image_t a, float erosion_size) {
+		image_t ret{};
+		erosion_size = std::min(std::max(erosion_size, 0.0f), 21.0f);
+		const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, a.as_void_const()};
+		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, ret.get_data().data.data()};
+		const cv::Mat element = cv::getStructuringElement( cv::MORPH_CROSS,
+							 cv::Size( static_cast<int>(2*erosion_size + 1), static_cast<int>(2*erosion_size+1) ),
+							 cv::Point( static_cast<int>(erosion_size), static_cast<int>(erosion_size) ) );
+		cv::erode( src, dst, element );
+		return ret;
+	}, "erode_image");
+
+	static operation_t op_dilate([](const image_t a, float dilate_size) {
+		image_t ret{};
+		dilate_size = std::min(std::max(dilate_size, 0.0f), 21.0f);
+		const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, a.as_void_const()};
+		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, ret.get_data().data.data()};
+		const cv::Mat element = cv::getStructuringElement( cv::MORPH_CROSS,
+							 cv::Size( static_cast<int>(2*dilate_size + 1), static_cast<int>(2*dilate_size+1) ),
+							 cv::Point( static_cast<int>(dilate_size), static_cast<int>(dilate_size) ) );
+		cv::dilate( src, dst, element );
+		return ret;
+	}, "erode_image");
 
 	operator_builder builder{};
 	builder.build(op_image_ephemeral, make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y,
@@ -371,6 +395,14 @@ void reset_programs()
 {
 	for (const auto program : programs)
 		program->reset_program(program->get_typesystem().get_type<image_t>().id());
+}
+
+std::array<size_t, 3> get_best_image_index()
+{
+	std::array<size_t, 3> best_index{};
+	for (const auto [slot, program] : blt::zip(best_index, programs))
+		slot = program->get_best_indexes<1>()[0];
+	return best_index;
 }
 
 void regenerate_image(blt::size_t index, float& image_storage, blt::i32 width, blt::i32 height)
