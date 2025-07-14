@@ -38,7 +38,7 @@ constexpr blt::i32 IMAGE_CHANNELS = 1;
 
 constexpr blt::size_t IMAGE_SIZE = IMAGE_DIMENSIONS * IMAGE_DIMENSIONS;
 constexpr blt::size_t IMAGE_SIZE_CHANNELS = IMAGE_SIZE * IMAGE_CHANNELS;
-constexpr blt::size_t IMAGE_SIZE_BYTES = IMAGE_SIZE_CHANNELS * sizeof(image_pixel_t);
+constexpr blt::size_t IMAGE_SIZE_BYTES = IMAGE_SIZE_CHANNELS * sizeof(image_ipixel_t);
 
 struct image_storage_t
 {

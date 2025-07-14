@@ -53,9 +53,7 @@ template <size_t Channel>
 void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t index)
 {
 	auto image = tree.get_evaluation_ref<image_t>();
-	// image->normalize();
 
-	// std::memcpy(images[index].data.data(), image->get_data().data.data(), IMAGE_SIZE_BYTES);
 	auto& data = image->get_data();
 	for (blt::size_t x = 0; x < IMAGE_DIMENSIONS; ++x)
 	{
@@ -63,28 +61,19 @@ void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t inde
 		{
 			images[index][(x * IMAGE_DIMENSIONS + y) * 3 + Channel] = data.get(x, y);
 
-			auto multiplier = (1 - std::abs((static_cast<float>(x) / (static_cast<float>(IMAGE_DIMENSIONS) / 2)) - 1)) + (1 - std::abs(
-				(static_cast<float>(y) / (static_cast<float>(IMAGE_DIMENSIONS) / 2)) - 1));
-
-			auto our3 = static_cast<double>(data.get(x, y)) / static_cast<double>(std::numeric_limits<blt::u32>::max());
-
+			auto our = static_cast<double>(data.get(x, y)) / static_cast<double>(std::numeric_limits<blt::u32>::max());
 
 			auto theirs = reference_image[Channel].get(x, y);
-			const auto diff = std::pow(our3,  2.2f) - std::pow(theirs, 2.2f);
-			if (std::isnan(diff))
-			{
-				if (std::isnan(our3))
-					BLT_DEBUG("Our is nan");
-				if (std::isnan(theirs))
-					BLT_DEBUG("Theirs is nan");
-				BLT_TRACE("We got {} vs {}", our3, theirs);
-				continue;
-			}
-			fitness.raw_fitness += static_cast<float>(diff);
+
+			auto gamma_ours = std::pow(our, 1.0f / 2.2f);
+			auto gamma_theirs = std::pow(theirs, 1.0f / 2.2f);
+
+			const auto diff = gamma_ours - gamma_theirs;
+			fitness.raw_fitness += static_cast<float>((diff * diff));
 		}
 	}
 	// fitness.raw_fitness /= static_cast<float>(IMAGE_SIZE_CHANNELS);
-	// fitness.raw_fitness = static_cast<float>(std::sqrt(fitness.raw_fitness));
+	fitness.raw_fitness = static_cast<float>(std::sqrt(fitness.raw_fitness));
 	fitness.standardized_fitness = fitness.raw_fitness;
 	fitness.adjusted_fitness = -fitness.standardized_fitness;
 }
@@ -93,7 +82,17 @@ template <typename T>
 void setup_operations(gp_program* program)
 {
 	static operation_t op_image_x([]() {
-		constexpr auto mul = std::numeric_limits<blt::u32>::max() - static_cast<blt::u32>(IMAGE_DIMENSIONS - 1);
+		constexpr auto mul = std::numeric_limits<blt::u32>::max() / static_cast<blt::u32>(IMAGE_DIMENSIONS - 1);
+		image_t ret{};
+		for (blt::u32 x = 0; x < IMAGE_DIMENSIONS; ++x)
+		{
+			for (blt::u32 y = 0; y < IMAGE_DIMENSIONS; ++y)
+				ret.get_data().get(x, y) = y * mul;
+		}
+		return ret;
+	});
+	static operation_t op_image_y([]() {
+		constexpr auto mul = std::numeric_limits<blt::u32>::max() / static_cast<blt::u32>(IMAGE_DIMENSIONS - 1);
 		image_t ret{};
 		for (blt::u32 x = 0; x < IMAGE_DIMENSIONS; ++x)
 		{
@@ -102,14 +101,10 @@ void setup_operations(gp_program* program)
 		}
 		return ret;
 	});
-	static operation_t op_image_y([]() {
-		constexpr auto mul = std::numeric_limits<blt::u32>::max() - static_cast<blt::u32>(IMAGE_DIMENSIONS - 1);
+	static auto op_image_random = operation_t([program]() {
 		image_t ret{};
-		for (blt::u32 x = 0; x < IMAGE_DIMENSIONS; ++x)
-		{
-			for (blt::u32 y = 0; y < IMAGE_DIMENSIONS; ++y)
-				ret.get_data().get(x, y) = y * mul;
-		}
+		for (auto& v : ret.get_data().data)
+			v = program->get_random().get_u32(0, std::numeric_limits<blt::u32>::max());
 		return ret;
 	});
 	static auto op_image_noise = operation_t([program]() {
@@ -136,32 +131,50 @@ void setup_operations(gp_program* program)
 	// 	return ret;
 	// }, "blend_image");
 	static operation_t op_image_sin([](const image_t a) {
+		constexpr auto limit = static_cast<double>(std::numeric_limits<blt::u32>::max());
 		image_t ret{};
 		for (const auto& [i, v] : blt::enumerate(std::as_const(a.get_data().data)))
-			ret.get_data().data[i] = blt::mem::type_cast<blt::u32>(static_cast<float>(std::sin(v)));
+			ret.get_data().data[i] = static_cast<blt::u32>(((std::sin((v / limit) * blt::PI) + 1.0) / 2.0f) * limit);
 		return ret;
 	}, "sin_image");
+	static operation_t op_image_sin_off([](const image_t a, const image_t b) {
+		constexpr auto limit = static_cast<double>(std::numeric_limits<blt::u32>::max());
+		image_t ret{};
+		for (const auto& [i, v, off] : blt::in_pairs(std::as_const(a.get_data().data), std::as_const(b.get_data().data)).enumerate().flatten())
+			ret.get_data().data[i] = static_cast<blt::u32>(((std::sin((v / limit) * blt::PI * (off / (limit / 4))) + 1.0) / 2.0f) * limit);
+		return ret;
+	}, "sin_image_off");
 	static operation_t op_image_cos([](const image_t a) {
+		constexpr auto limit = static_cast<double>(std::numeric_limits<blt::u32>::max());
 		image_t ret{};
 		for (const auto& [i, v] : blt::enumerate(std::as_const(a.get_data().data)))
-			ret.get_data().data[i] = blt::mem::type_cast<blt::u32>(static_cast<float>(std::cos(v)));
+			ret.get_data().data[i] = static_cast<blt::u32>(((std::cos((v / limit) * blt::PI * 2) + 1.0) / 2.0f) * limit);
 		return ret;
 	}, "cos_image");
+	static operation_t op_image_cos_off([](const image_t a, const image_t b) {
+		constexpr auto limit = static_cast<double>(std::numeric_limits<blt::u32>::max());
+		image_t ret{};
+		for (const auto& [i, v, off] : blt::in_pairs(std::as_const(a.get_data().data), std::as_const(b.get_data().data)).enumerate().flatten())
+			ret.get_data().data[i] = static_cast<blt::u32>(((std::cos((v / limit) * blt::PI * (off / (limit / 2))) + 1.0) / 2.0f) * limit);
+		return ret;
+	}, "cos_image_off");
 	static operation_t op_image_log([](const image_t a) {
+		constexpr auto limit = static_cast<double>(std::numeric_limits<blt::u32>::max());
 		image_t ret{};
 		for (const auto& [i, v] : blt::enumerate(std::as_const(a.get_data().data)))
 		{
 			if (v == 0)
 				ret.get_data().data[i] = 0;
 			else
-				ret.get_data().data[i] = blt::mem::type_cast<blt::u32>(static_cast<float>(std::log(v)));
+				ret.get_data().data[i] = static_cast<blt::u32>(std::log(v / limit) * limit);
 		}
 		return ret;
 	}, "log_image");
 	static operation_t op_image_exp([](const image_t a) {
+		constexpr auto limit = static_cast<double>(std::numeric_limits<blt::u32>::max());
 		image_t ret{};
 		for (const auto& [i, v] : blt::enumerate(std::as_const(a.get_data().data)))
-			ret.get_data().data[i] = blt::mem::type_cast<blt::u32>(static_cast<float>(std::exp(v)));
+			ret.get_data().data[i] = static_cast<blt::u32>(std::exp(v / limit) * limit);
 		return ret;
 	}, "exp_image");
 	static operation_t op_image_or([](const image_t a, const image_t b) {
@@ -200,72 +213,138 @@ void setup_operations(gp_program* program)
 			ret.get_data().data[i] = av < bv ? av : bv;
 		return ret;
 	}, "lt_image");
-	static operation_t op_image_perlin([](const float ofx, const float ofy, const float ofz, const float lacunarity, const float gain,
-										const float octaves) {
+	static operation_t op_image_grad([](const image_t a, const image_t b) {
+		image_t out{};                            // storage for the result
+		const auto& inA = a.get_data().data;
+		const auto& inB = b.get_data().data;
+		auto& dst = out.get_data().data;
+
+		constexpr std::size_t W = IMAGE_DIMENSIONS;
+		constexpr std::size_t H = IMAGE_DIMENSIONS;
+
+		if (true)
+		{
+			for (std::size_t y = 0; y < H; ++y)
+			{
+				for (std::size_t x = 0; x < W; ++x)
+				{
+					const double t = static_cast<double>(x) / static_cast<double>(W - 1);
+					const std::size_t idx = y * W + x;
+
+					const double a = static_cast<double>(inA[idx]);
+					const double b = static_cast<double>(inB[idx]);
+
+					dst[idx] = static_cast<blt::u32>((1.0 - t) * a + t * b);
+				}
+			}
+		} else   // vertical gradient
+		{
+			for (std::size_t y = 0; y < H; ++y)
+			{
+				const double t = static_cast<double>(y) / static_cast<double>(H - 1);
+				for (std::size_t x = 0; x < W; ++x)
+				{
+					const std::size_t idx = y * W + x;
+
+					const double a = static_cast<double>(inA[idx]);
+					const double b = static_cast<double>(inB[idx]);
+
+					dst[idx] = static_cast<blt::u32>((1.0 - t) * a + t * b);
+				}
+			}
+		}
+		return out;
+	}, "grad_image");
+	static operation_t op_image_perlin([](const image_t a) {
+		constexpr auto limit = static_cast<double>(std::numeric_limits<blt::u32>::max());
 		image_t ret{};
-		for (const auto& [i, out] : blt::enumerate(ret.get_data().data))
-			out = blt::mem::type_cast<blt::u32>(stb_perlin_ridge_noise3(static_cast<float>(i % IMAGE_DIMENSIONS) + ofx,
-																		static_cast<float>(i / IMAGE_DIMENSIONS) + ofy, ofz, lacunarity + 2,
-																		gain + 0.5f, 1.0f, static_cast<int>(octaves)));
+		for (const auto& [i, out, bv] : blt::in_pairs(ret.get_data().data, std::as_const(a.get_data().data)).enumerate().flatten())
+		{
+			constexpr auto AND = IMAGE_DIMENSIONS - 1;
+			const double y = (static_cast<float>(i) / IMAGE_DIMENSIONS) / static_cast<float>(IMAGE_DIMENSIONS);
+			const double x = static_cast<float>(i & AND) / static_cast<float>(IMAGE_DIMENSIONS);
+			out = static_cast<blt::u32>(stb_perlin_noise3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(bv / (limit * 0.1)), 0, 0,
+														0) * limit);
+		}
 		return ret;
 	}, "perlin_image");
-	static operation_t op_image_perlin_bounded([](float octaves) {
-		octaves = std::min(std::max(octaves, 4.0f), 8.0f);
+	static auto op_image_2d_perlin_eph = operation_t([program]() {
+		constexpr auto limit = static_cast<double>(std::numeric_limits<blt::u32>::max());
 		image_t ret{};
-		for (const auto& [i, out] : blt::enumerate(ret.get_data().data))
-			out = blt::mem::type_cast<blt::u32>(stb_perlin_fbm_noise3(static_cast<float>(i % IMAGE_DIMENSIONS) + 0.23423f,
-																	static_cast<float>(i) / IMAGE_DIMENSIONS + 0.6234f, 0.4861f, 2, 0.5,
-																	static_cast<int>(octaves)));
-		return ret;
-	}, "perlin_image_bounded");
-	static operation_t op_sin([](const float a) {
-		return std::sin(a);
-	}, "sin_float");
-	static operation_t op_cos([](const float a) {
-		return std::cos(a);
-	}, "cos_float");
-	static operation_t op_exp([](const float a) {
-		return std::exp(a);
-	}, "exp_float");
-	static operation_t op_log([](const float a) {
-		if (blt::f_equal(a, 0))
-			return 0.0f;
-		if (a < 0)
-			return -std::log(-a);
-		return std::log(a);
-	}, "log_float");
-	static auto lit = operation_t([program]() {
-		return program->get_random().get_float(-1.0f, 1.0f);
-	}, "lit_float").set_ephemeral();
-	static operation_t op_erode([](const image_t a, float erosion_size) {
-		image_t ret{};
-		erosion_size = std::min(std::max(erosion_size, 0.0f), 21.0f);
-		const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, a.as_void_const()};
-		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, ret.get_data().data.data()};
-		const cv::Mat element = cv::getStructuringElement( cv::MORPH_CROSS,
-							 cv::Size( static_cast<int>(2*erosion_size + 1), static_cast<int>(2*erosion_size+1) ),
-							 cv::Point( static_cast<int>(erosion_size), static_cast<int>(erosion_size) ) );
-		cv::erode( src, dst, element );
-		return ret;
-	}, "erode_image");
+		const auto variety = program->get_random().get_float(1.5, 255);
+		const auto x_warp = program->get_random().get_i32(0, 255);
+		const auto y_warp = program->get_random().get_i32(0, 255);
+		const auto z_warp = program->get_random().get_i32(0, 255);
 
-	static operation_t op_dilate([](const image_t a, float dilate_size) {
-		image_t ret{};
-		dilate_size = std::min(std::max(dilate_size, 0.0f), 21.0f);
-		const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, a.as_void_const()};
-		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, ret.get_data().data.data()};
-		const cv::Mat element = cv::getStructuringElement( cv::MORPH_CROSS,
-							 cv::Size( static_cast<int>(2*dilate_size + 1), static_cast<int>(2*dilate_size+1) ),
-							 cv::Point( static_cast<int>(dilate_size), static_cast<int>(dilate_size) ) );
-		cv::dilate( src, dst, element );
+		const auto offset_x = program->get_random().get_float(1.0 / 64.0f, 16.0f);
+		const auto offset_y = program->get_random().get_float(1.0 / 64.0f, 16.0f);
+
+		for (const auto& [i, out] : blt::enumerate(ret.get_data().data))
+		{
+			constexpr auto AND = IMAGE_DIMENSIONS - 1;
+			const double y = (static_cast<float>(i) / IMAGE_DIMENSIONS) / static_cast<float>(IMAGE_DIMENSIONS);
+			const double x = static_cast<float>(i & AND) / static_cast<float>(IMAGE_DIMENSIONS);
+			out = static_cast<blt::u32>(stb_perlin_noise3(static_cast<float>(x) * offset_x, static_cast<float>(y) * offset_y, variety, x_warp, y_warp,
+														z_warp) * limit);
+		}
 		return ret;
-	}, "erode_image");
+	}, "perlin_image_eph").set_ephemeral();
+	static auto op_image_2d_perlin_oct = operation_t([program]() {
+		constexpr auto limit = static_cast<double>(std::numeric_limits<blt::u32>::max());
+		image_t ret{};
+		const auto rand = program->get_random().get_float(0, 255);
+		const auto octaves = program->get_random().get_i32(2, 8);
+		const auto gain = program->get_random().get_float(0.1f, 0.9f);
+		const auto lac = program->get_random().get_float(1.5f, 6.f);
+
+		const auto offset = program->get_random().get_float(1.0 / 255.0f, 16.0f);
+
+		for (const auto& [i, out] : blt::enumerate(ret.get_data().data))
+		{
+			constexpr auto AND = IMAGE_DIMENSIONS - 1;
+			const double y = (static_cast<float>(i) / IMAGE_DIMENSIONS) / static_cast<float>(IMAGE_DIMENSIONS);
+			const double x = static_cast<float>(i & AND) / static_cast<float>(IMAGE_DIMENSIONS);
+			out = static_cast<blt::u32>(stb_perlin_fbm_noise3(static_cast<float>(x * offset), static_cast<float>(y * offset), rand, lac, gain,
+															octaves) * limit);
+		}
+		return ret;
+	}, "perlin_image_eph_oct").set_ephemeral();
+
+	static operation_t op_passthrough([](const image_t& a) {
+		image_t ret{};
+		std::memcpy(ret.get_data().data.data(), a.get_data().data.data(), IMAGE_SIZE_BYTES);
+		return ret;
+	}, "passthrough");
+
+	// static operation_t op_erode([](const image_t a, float erosion_size) {
+	// 	image_t ret{};
+	// 	erosion_size = std::min(std::max(erosion_size, 0.0f), 21.0f);
+	// 	const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, a.as_void_const()};
+	// 	cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, ret.get_data().data.data()};
+	// 	const cv::Mat element = cv::getStructuringElement( cv::MORPH_CROSS,
+	// 						 cv::Size( static_cast<int>(2*erosion_size + 1), static_cast<int>(2*erosion_size+1) ),
+	// 						 cv::Point( static_cast<int>(erosion_size), static_cast<int>(erosion_size) ) );
+	// 	cv::erode( src, dst, element );
+	// 	return ret;
+	// }, "erode_image");
+	//
+	// static operation_t op_dilate([](const image_t a, float dilate_size) {
+	// 	image_t ret{};
+	// 	dilate_size = std::min(std::max(dilate_size, 0.0f), 21.0f);
+	// 	const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, a.as_void_const()};
+	// 	cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, ret.get_data().data.data()};
+	// 	const cv::Mat element = cv::getStructuringElement( cv::MORPH_CROSS,
+	// 						 cv::Size( static_cast<int>(2*dilate_size + 1), static_cast<int>(2*dilate_size+1) ),
+	// 						 cv::Point( static_cast<int>(dilate_size), static_cast<int>(dilate_size) ) );
+	// 	cv::dilate( src, dst, element );
+	// 	return ret;
+	// }, "erode_image");
 
 	operator_builder builder{};
-	builder.build(op_image_ephemeral, make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y,
-				op_image_sin, op_image_gt, op_image_lt, op_image_cos, op_image_log, op_image_exp, op_image_or, op_image_and, op_image_xor,
-				op_image_not, op_image_perlin_bounded, make_add<float>(), make_sub<float>(), make_mul<float>(),
-				make_prot_div<float>(), op_sin, op_cos, op_exp, op_log, lit);
+	// builder.build(op_image_ephemeral, make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y,
+	// 			op_image_sin, op_image_gt, op_image_lt, op_image_cos, op_image_log, op_image_exp, op_image_or, op_image_and, op_image_xor, op_image_cos_off, op_image_sin_off op_image_perlinm
+	// 			op_image_2d_ifs_eph, op_image_noise, op_image_random, op_image_2d_perlin_eph, op_image_not, op_image_2d_perlin_oct);
+	builder.build(op_image_grad, op_image_x, op_image_y);
 	program->set_operations(builder.grab());
 }
 
@@ -356,7 +435,7 @@ void cleanup()
 		delete program;
 }
 
-std::array<image_storage_t, 3>& get_reference_image()
+const std::array<image_storage_t, 3>& get_reference_image()
 {
 	return reference_image;
 }

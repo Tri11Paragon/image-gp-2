@@ -39,7 +39,7 @@ std::array<image_ipixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3>& get_image(b
 
 void cleanup();
 
-std::array<image_storage_t, 3>& get_reference_image();
+const std::array<image_storage_t, 3>& get_reference_image();
 
 std::array<size_t, 3> get_best_image_index();
 

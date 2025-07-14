@@ -37,9 +37,9 @@ std::array<image_storage_t, 3> image_storage_t::from_file(const std::string& pat
 	{
 		for (blt::size_t j = 0; j < IMAGE_DIMENSIONS; ++j)
 		{
-			storage_r.get(i, j) = resized[(i * IMAGE_DIMENSIONS + j) * 4];
-			storage_g.get(i, j) = resized[(i * IMAGE_DIMENSIONS + j) * 4 + 1];
-			storage_b.get(i, j) = resized[(i * IMAGE_DIMENSIONS + j) * 4 + 2];
+			storage_r.get(i, j) = resized[(j * IMAGE_DIMENSIONS + x) * 4];
+			storage_g.get(i, j) = resized[(j * IMAGE_DIMENSIONS + x) * 4 + 1];
+			storage_b.get(i, j) = resized[(j * IMAGE_DIMENSIONS + x) * 4 + 2];
 		}
 	}
 
