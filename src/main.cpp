@@ -190,6 +190,28 @@ void update(const blt::gfx::window_data& data)
 		if (ImGui::BeginTabItem("Statistics"))
 		{
 			ImGui::Text("Here you can view statistics.");
+
+			auto pops = get_populations();
+
+			const std::array<std::string, 3> labels = {"Red", "Green", "Blue"};
+
+			for (const auto& [i, label, pop] : blt::in_pairs(labels, pops).enumerate().flatten())
+			{
+				if (i > 0)
+					ImGui::SameLine();
+				ImGui::BeginGroup();
+				ImGui::Text("Population (%s)", label.c_str());
+				if (ImGui::BeginChild(label.c_str(), ImVec2(250, 0), true))
+				{
+					for (const auto& [i, ind] : blt::enumerate(*pop))
+					{
+						ImGui::Text("Tree (%ld) -> Fitness: %lf", i, ind.fitness.adjusted_fitness);
+					}
+				}
+				ImGui::EndChild();
+				ImGui::EndGroup();
+			}
+
 			// Additional UI for statistical data
 			ImGui::EndTabItem();
 		}

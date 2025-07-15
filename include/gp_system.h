@@ -19,6 +19,7 @@
 #ifndef GP_SYSTEM_H
 #define GP_SYSTEM_H
 #include <image_storage.h>
+#include <blt/gp/tree.h>
 #include <blt/std/types.h>
 
 void setup_gp_system(blt::size_t population_size);
@@ -46,5 +47,7 @@ std::array<size_t, 3> get_best_image_index();
 std::array<image_pixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3> to_gl_image(const std::array<image_storage_t, 3>& image);
 
 std::tuple<const std::vector<float>&, const std::vector<float>&, const std::vector<float>&, const std::vector<float>&> get_fitness_history();
+
+std::array<blt::gp::population_t*, 3> get_populations();
 
 #endif //GP_SYSTEM_H

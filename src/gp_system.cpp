@@ -214,44 +214,14 @@ void setup_operations(gp_program* program)
 		return ret;
 	}, "lt_image");
 	static operation_t op_image_grad([](const image_t a, const image_t b) {
-		image_t out{};                            // storage for the result
-		const auto& inA = a.get_data().data;
-		const auto& inB = b.get_data().data;
-		auto& dst = out.get_data().data;
+		image_t out{};
 
-		constexpr std::size_t W = IMAGE_DIMENSIONS;
-		constexpr std::size_t H = IMAGE_DIMENSIONS;
-
-		if (true)
+		for (const auto& [i, av, bv] : blt::in_pairs(std::as_const(a.get_data().data), std::as_const(b.get_data().data)).enumerate().flatten())
 		{
-			for (std::size_t y = 0; y < H; ++y)
-			{
-				for (std::size_t x = 0; x < W; ++x)
-				{
-					const double t = static_cast<double>(x) / static_cast<double>(W - 1);
-					const std::size_t idx = y * W + x;
+			const auto p = static_cast<double>(i) / static_cast<double>(IMAGE_SIZE);
+			const auto pi = 1 - p;
 
-					const double a = static_cast<double>(inA[idx]);
-					const double b = static_cast<double>(inB[idx]);
-
-					dst[idx] = static_cast<blt::u32>((1.0 - t) * a + t * b);
-				}
-			}
-		} else   // vertical gradient
-		{
-			for (std::size_t y = 0; y < H; ++y)
-			{
-				const double t = static_cast<double>(y) / static_cast<double>(H - 1);
-				for (std::size_t x = 0; x < W; ++x)
-				{
-					const std::size_t idx = y * W + x;
-
-					const double a = static_cast<double>(inA[idx]);
-					const double b = static_cast<double>(inB[idx]);
-
-					dst[idx] = static_cast<blt::u32>((1.0 - t) * a + t * b);
-				}
-			}
+			out.get_data().data[i] = static_cast<blt::u32>(av * p + bv * pi);
 		}
 		return out;
 	}, "grad_image");
@@ -341,10 +311,11 @@ void setup_operations(gp_program* program)
 	// }, "erode_image");
 
 	operator_builder builder{};
-	// builder.build(op_image_ephemeral, make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y,
-	// 			op_image_sin, op_image_gt, op_image_lt, op_image_cos, op_image_log, op_image_exp, op_image_or, op_image_and, op_image_xor, op_image_cos_off, op_image_sin_off op_image_perlinm
-	// 			op_image_2d_ifs_eph, op_image_noise, op_image_random, op_image_2d_perlin_eph, op_image_not, op_image_2d_perlin_oct);
-	builder.build(op_image_grad, op_image_x, op_image_y);
+	builder.build(op_image_ephemeral, make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y,
+				op_image_sin, op_image_gt, op_image_lt, op_image_cos, op_image_log, op_image_exp, op_image_or, op_image_and, op_image_xor,
+				op_image_cos_off, op_image_sin_off, op_image_perlin, op_image_noise, op_image_random, op_image_2d_perlin_eph, op_image_not, op_image_grad,
+				op_image_2d_perlin_oct);
+	// builder.build(op_image_grad, op_image_x, op_image_y);
 	program->set_operations(builder.grab());
 }
 
@@ -490,4 +461,9 @@ void regenerate_image(blt::size_t index, float& image_storage, blt::i32 width, b
 std::tuple<const std::vector<float>&, const std::vector<float>&, const std::vector<float>&, const std::vector<float>&> get_fitness_history()
 {
 	return {average_fitness, best_fitness, worst_fitness, overall_fitness};
+}
+
+std::array<population_t*, 3> get_populations()
+{
+	return {&programs[0]->get_current_pop(), &programs[1]->get_current_pop(), &programs[2]->get_current_pop()};
 }
