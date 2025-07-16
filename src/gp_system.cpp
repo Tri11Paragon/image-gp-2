@@ -38,11 +38,16 @@ float filter_nan(const float f, const float failure = 0.0f)
 	return f;
 }
 
+bool use_gamma_correction = false;
+
 std::array<gp_program*, 3> programs;
 prog_config_t config{};
 
 std::vector<std::array<image_ipixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3>> images;
-auto reference_image = image_storage_t::from_file("../silly.png");
+std::vector<std::array<image_ipixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS>> images_red;
+std::vector<std::array<image_ipixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS>> images_green;
+std::vector<std::array<image_ipixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS>> images_blue;
+std::array<image_storage_t, 3> reference_image;
 
 std::vector<float> average_fitness;
 std::vector<float> best_fitness;
@@ -59,23 +64,44 @@ void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t inde
 	{
 		for (blt::size_t y = 0; y < IMAGE_DIMENSIONS; ++y)
 		{
-			images[index][(x * IMAGE_DIMENSIONS + y) * 3 + Channel] = data.get(x, y);
+			switch (Channel)
+			{
+				case 0:
+					images_red[index][(y * IMAGE_DIMENSIONS + x)] = data.get(x, y);
+					break;
+				case 1:
+					images_green[index][(y * IMAGE_DIMENSIONS + x)] = data.get(x, y);
+					break;
+				case 2:
+					images_blue[index][(y * IMAGE_DIMENSIONS + x)] = data.get(x, y);
+					break;
+				default:
+					break;
+			}
+			// images[index][(y * IMAGE_DIMENSIONS + x) * 3 + Channel] = data.get(x, y);
 
-			auto our = static_cast<double>(data.get(x, y)) / static_cast<double>(std::numeric_limits<blt::u32>::max());
+			const auto our = static_cast<double>(data.get(x, y)) / static_cast<double>(std::numeric_limits<blt::u32>::max());
 
-			auto theirs = reference_image[Channel].get(x, y);
+			const auto theirs = reference_image[Channel].get(x, y);
 
-			auto gamma_ours = std::pow(our, 1.0f / 2.2f);
-			auto gamma_theirs = std::pow(theirs, 1.0f / 2.2f);
+			const auto gamma_ours = std::pow(our, 1.0f / 2.2f);
+			// const auto gamma_theirs = std::pow(theirs, 1.0f / 2.2f);
 
-			const auto diff = gamma_ours - gamma_theirs;
-			fitness.raw_fitness += static_cast<float>((diff * diff));
+			if (use_gamma_correction)
+			{
+				const auto diff = gamma_ours - theirs;
+				fitness.raw_fitness += static_cast<float>((diff * diff));
+			} else
+			{
+				const auto diff = our - theirs;
+				fitness.raw_fitness += static_cast<float>((diff * diff));
+			}
 		}
 	}
-	// fitness.raw_fitness /= static_cast<float>(IMAGE_SIZE_CHANNELS);
-	fitness.raw_fitness = static_cast<float>(std::sqrt(fitness.raw_fitness));
-	fitness.standardized_fitness = fitness.raw_fitness;
-	fitness.adjusted_fitness = -fitness.standardized_fitness;
+	fitness.set_normal(static_cast<float>(std::sqrt(fitness.raw_fitness)));
+	// fitness.raw_fitness = static_cast<float>(std::sqrt(fitness.raw_fitness));
+	// fitness.standardized_fitness = fitness.raw_fitness;
+	// fitness.adjusted_fitness = -fitness.standardized_fitness;
 }
 
 template <typename T>
@@ -313,14 +339,16 @@ void setup_operations(gp_program* program)
 	operator_builder builder{};
 	builder.build(op_image_ephemeral, make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y,
 				op_image_sin, op_image_gt, op_image_lt, op_image_cos, op_image_log, op_image_exp, op_image_or, op_image_and, op_image_xor,
-				op_image_cos_off, op_image_sin_off, op_image_perlin, op_image_noise, op_image_random, op_image_2d_perlin_eph, op_image_not, op_image_grad,
-				op_image_2d_perlin_oct);
+				op_image_cos_off, op_image_sin_off, op_image_perlin, op_image_noise, op_image_random, op_image_2d_perlin_eph, op_image_not,
+				op_image_grad, op_image_2d_perlin_oct);
 	// builder.build(op_image_grad, op_image_x, op_image_y);
 	program->set_operations(builder.grab());
 }
 
 void setup_gp_system(const blt::size_t population_size)
 {
+	reference_image = image_storage_t::from_file("../silly.png");
+
 	config.set_pop_size(population_size);
 	config.set_elite_count(2);
 	config.set_thread_count(0);
@@ -340,6 +368,9 @@ void setup_gp_system(const blt::size_t population_size)
 	setup_operations<struct p3>(programs[2]);
 
 	images.resize(population_size);
+	images_red.resize(population_size);
+	images_green.resize(population_size);
+	images_blue.resize(population_size);
 
 	static auto sel = select_tournament_t{};
 
@@ -397,6 +428,13 @@ bool should_terminate()
 
 std::array<image_ipixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3>& get_image(const blt::size_t index)
 {
+	for (const auto& [i, image_red, image_green, image_blue] : blt::zip(images_red[index], images_green[index],
+																				images_blue[index]).enumerate().flatten())
+	{
+		images[index][i * 3] = image_red;
+		images[index][i * 3 + 1] = image_green;
+		images[index][i * 3 + 2] = image_blue;
+	}
 	return images[index];
 }
 
@@ -418,6 +456,9 @@ std::array<image_pixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3> to_gl_image(c
 	{
 		for (blt::size_t y = 0; y < IMAGE_DIMENSIONS; ++y)
 		{
+			// image_data[(x * IMAGE_DIMENSIONS + y) * 3 + 0] = std::pow(image[0].get(x, y), 1.0f / 2.2f);
+			// image_data[(x * IMAGE_DIMENSIONS + y) * 3 + 1] = std::pow(image[1].get(x, y), 1.0f / 2.2f);
+			// image_data[(x * IMAGE_DIMENSIONS + y) * 3 + 2] = std::pow(image[2].get(x, y), 1.0f / 2.2f);
 			image_data[(x * IMAGE_DIMENSIONS + y) * 3 + 0] = image[0].get(x, y);
 			image_data[(x * IMAGE_DIMENSIONS + y) * 3 + 1] = image[1].get(x, y);
 			image_data[(x * IMAGE_DIMENSIONS + y) * 3 + 2] = image[2].get(x, y);
@@ -435,6 +476,12 @@ void set_population_size(const blt::u32 size)
 {
 	if (size > images.size())
 		images.resize(size);
+	if (size > images_red.size())
+		images_red.resize(size);
+	if (size > images_green.size())
+		images_green.resize(size);
+	if (size > images_blue.size())
+		images_blue.resize(size);
 	config.set_pop_size(size);
 	for (const auto program : programs)
 		program->set_config(config);
@@ -467,3 +514,6 @@ std::array<population_t*, 3> get_populations()
 {
 	return {&programs[0]->get_current_pop(), &programs[1]->get_current_pop(), &programs[2]->get_current_pop()};
 }
+
+void set_use_gamma_correction(bool use)
+{use_gamma_correction = true;}

@@ -50,4 +50,6 @@ std::tuple<const std::vector<float>&, const std::vector<float>&, const std::vect
 
 std::array<blt::gp::population_t*, 3> get_populations();
 
+void set_use_gamma_correction(bool use);
+
 #endif //GP_SYSTEM_H

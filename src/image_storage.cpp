@@ -21,13 +21,27 @@
 #include <blt/iterator/zip.h>
 #include <blt/math/vectors.h>
 
+inline float srgb_to_linear(const float v) noexcept
+{
+	return (v <= 0.04045f) ? (v / 12.92f)
+						   : std::pow((v + 0.055f) / 1.055f, 2.4f);
+}
+
+
 std::array<image_storage_t, 3> image_storage_t::from_file(const std::string& path)
 {
 	stbi_set_flip_vertically_on_load(true);
 	int x, y, channels;
-	auto* data = stbi_loadf(path.c_str(), &x, &y, &channels, 4);
+	auto* data = stbi_load(path.c_str(), &x, &y, &channels, 4);
 
-	const auto resized = stbir_resize_float_linear(data, x, y, 0, nullptr, IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, 0, STBIR_RGBA);
+	unsigned char* resized = nullptr;
+
+	if (x == IMAGE_DIMENSIONS && y == IMAGE_DIMENSIONS)
+	{
+		resized = data;
+		data = nullptr;
+	} else
+		resized = stbir_resize_uint8_srgb(data, x, y, 0, nullptr, IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, 0, STBIR_RGBA);
 
 	image_storage_t storage_r{};
 	image_storage_t storage_g{};
@@ -37,9 +51,9 @@ std::array<image_storage_t, 3> image_storage_t::from_file(const std::string& pat
 	{
 		for (blt::size_t j = 0; j < IMAGE_DIMENSIONS; ++j)
 		{
-			storage_r.get(i, j) = resized[(j * IMAGE_DIMENSIONS + x) * 4];
-			storage_g.get(i, j) = resized[(j * IMAGE_DIMENSIONS + x) * 4 + 1];
-			storage_b.get(i, j) = resized[(j * IMAGE_DIMENSIONS + x) * 4 + 2];
+			storage_r.get(i, j) = static_cast<float>(resized[(i * IMAGE_DIMENSIONS + j) * 4]) / 255.0f;
+			storage_g.get(i, j) = static_cast<float>(resized[(i * IMAGE_DIMENSIONS + j) * 4 + 1]) / 255.0f;
+			storage_b.get(i, j) = static_cast<float>(resized[(i * IMAGE_DIMENSIONS + j) * 4 + 2]) / 255.0f;
 		}
 	}
 
@@ -49,7 +63,9 @@ std::array<image_storage_t, 3> image_storage_t::from_file(const std::string& pat
 }
 
 std::array<image_storage_t, 3> image_istorage_t::from_file(const std::string& path)
-{}
+{
+	BLT_ERROR("NOT IMPLEMENTED!");
+}
 
 void image_istorage_t::normalize()
 {}

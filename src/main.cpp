@@ -30,6 +30,9 @@ void update_population_size(const blt::u32 new_size)
 	for (blt::size_t i = population_size; i < new_size; i++)
 	{
 		auto texture = new texture_gl2D(IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGBA8);
+		texture->bind();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		gl_images.push_back(texture);
 		resources.set(std::to_string(i), texture);
 	}
@@ -41,7 +44,6 @@ std::thread run_gp()
 {
 	return std::thread{
 		[]() {
-			setup_gp_system(population_size);
 			while (!should_exit)
 			{
 				if (run_generation)
@@ -64,10 +66,16 @@ void init(const blt::gfx::window_data&)
 	for (blt::size_t i = 0; i < population_size; i++)
 	{
 		auto texture = new texture_gl2D(IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGBA8);
+		texture->bind();
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		gl_images.push_back(texture);
 		resources.set(std::to_string(i), texture);
 	}
 	const auto texture = new texture_gl2D(IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGBA8);
+	texture->bind();
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	texture->upload(to_gl_image(get_reference_image()).data(), IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGB, GL_FLOAT);
 	resources.set("reference", texture);
 	global_matrices.create_internals();
@@ -98,6 +106,7 @@ void update(const blt::gfx::window_data& data)
 
 	static blt::i32 image_to_enlarge = -1;
 	bool clicked_on_image = false;
+	static bool use_gramma_correction = false;
 	static bool show_best = false;
 
 	// Create the tab bar
@@ -128,6 +137,8 @@ void update(const blt::gfx::window_data& data)
 					run_generation = true;
 				ImGui::InputInt("Min Time Between Runs (ms)", &min_between_runs);
 				ImGui::Checkbox("Show Best", &show_best);
+				if (ImGui::Checkbox("Use Gamma Correction?", &use_gramma_correction))
+					set_use_gamma_correction(use_gramma_correction);
 			}
 			ImGui::EndChild();
 
@@ -218,9 +229,15 @@ void update(const blt::gfx::window_data& data)
 
 		if (ImGui::BeginTabItem("Reference"))
 		{
-			blt::f32 w = data.width;
-			auto h = data.height - top_bar_height - 10;
-			renderer_2d.drawRectangle({static_cast<blt::f32>(w / 2), h / 2, w, h}, "reference");
+			auto w = static_cast<float>(data.width);
+			auto h = static_cast<float>(data.height) - top_bar_height - 10;
+
+			renderer_2d.drawRectangle({
+										w / 2,
+										h / 2,
+										std::min(w, static_cast<float>(IMAGE_DIMENSIONS)),
+										std::min(h, static_cast<float>(IMAGE_DIMENSIONS))
+									}, "reference");
 			ImGui::EndTabItem();
 		}
 
@@ -271,7 +288,8 @@ void update(const blt::gfx::window_data& data)
 		gl_images[i]->upload(get_image(i).data(), IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, GL_RGB, GL_UNSIGNED_INT);
 	}
 
-	if ((blt::gfx::isMousePressed(0) && blt::gfx::mousePressedLastFrame() && !clicked_on_image) || (blt::gfx::isKeyPressed(GLFW_KEY_ESCAPE) && blt::gfx::keyPressedLastFrame()))
+	if ((blt::gfx::isMousePressed(0) && blt::gfx::mousePressedLastFrame() && !clicked_on_image) || (blt::gfx::isKeyPressed(GLFW_KEY_ESCAPE) &&
+		blt::gfx::keyPressedLastFrame()))
 		image_to_enlarge = -1;
 
 	if (show_best)
@@ -281,20 +299,20 @@ void update(const blt::gfx::window_data& data)
 		{
 			const auto width = std::min(static_cast<float>(data.width) - side_bar_width, static_cast<float>(256) * 3) / 3;
 			const auto height = std::min(static_cast<float>(data.height) - top_bar_height, static_cast<float>(256) * 3) / 3;
-			renderer_2d.drawRectangle(blt::gfx::rectangle2d_t{blt::gfx::anchor_t::BOTTOM_LEFT,
-									side_bar_width + 256 + i * width, 64, width, height
-								}, std::to_string(best_image), 1);
+			renderer_2d.drawRectangle(blt::gfx::rectangle2d_t{blt::gfx::anchor_t::BOTTOM_LEFT, side_bar_width + 256 + i * width, 64, width, height},
+									std::to_string(best_image), 1);
 		}
 	}
 
 	if (image_to_enlarge != -1)
 	{
 		if (blt::gfx::isKeyPressed(GLFW_KEY_R) && blt::gfx::keyPressedLastFrame())
-		{
-
-		}
-		renderer_2d.drawRectangle(blt::gfx::rectangle2d_t{blt::gfx::anchor_t::BOTTOM_LEFT,
-									side_bar_width + 256, 64, std::min(static_cast<float>(data.width) - side_bar_width, static_cast<float>(256) * 3),
+		{}
+		renderer_2d.drawRectangle(blt::gfx::rectangle2d_t{
+									blt::gfx::anchor_t::BOTTOM_LEFT,
+									side_bar_width + 256,
+									64,
+									std::min(static_cast<float>(data.width) - side_bar_width, static_cast<float>(256) * 3),
 									std::min(static_cast<float>(data.height) - top_bar_height, static_cast<float>(256) * 3)
 								}, std::to_string(image_to_enlarge), 1);
 	}
@@ -313,6 +331,7 @@ void destroy(const blt::gfx::window_data&)
 
 int main()
 {
+	setup_gp_system(population_size);
 	auto run_gp_thread = run_gp();
 	blt::gfx::init(blt::gfx::window_data{"Image GP", init, update, destroy}.setSyncInterval(1));
 	should_exit = true;
