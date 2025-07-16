@@ -312,42 +312,63 @@ void setup_operations(gp_program* program)
 		return ret;
 	}, "passthrough");
 
-	// static operation_t op_erode([](const image_t a, float erosion_size) {
-	// 	image_t ret{};
-	// 	erosion_size = std::min(std::max(erosion_size, 0.0f), 21.0f);
-	// 	const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, a.as_void_const()};
-	// 	cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, ret.get_data().data.data()};
-	// 	const cv::Mat element = cv::getStructuringElement( cv::MORPH_CROSS,
-	// 						 cv::Size( static_cast<int>(2*erosion_size + 1), static_cast<int>(2*erosion_size+1) ),
-	// 						 cv::Point( static_cast<int>(erosion_size), static_cast<int>(erosion_size) ) );
-	// 	cv::erode( src, dst, element );
-	// 	return ret;
-	// }, "erode_image");
-	//
-	// static operation_t op_dilate([](const image_t a, float dilate_size) {
-	// 	image_t ret{};
-	// 	dilate_size = std::min(std::max(dilate_size, 0.0f), 21.0f);
-	// 	const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, a.as_void_const()};
-	// 	cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, ret.get_data().data.data()};
-	// 	const cv::Mat element = cv::getStructuringElement( cv::MORPH_CROSS,
-	// 						 cv::Size( static_cast<int>(2*dilate_size + 1), static_cast<int>(2*dilate_size+1) ),
-	// 						 cv::Point( static_cast<int>(dilate_size), static_cast<int>(dilate_size) ) );
-	// 	cv::dilate( src, dst, element );
-	// 	return ret;
-	// }, "erode_image");
+	static operation_t op_erode([program](const image_t a) {
+		constexpr auto limit = static_cast<float>(std::numeric_limits<blt::u32>::max());
+		const auto erosion_size = program->get_random().get_i32(3, 12);
+		std::vector<float> converted_data(IMAGE_SIZE);
+		std::vector<float> output_data(IMAGE_SIZE);
+
+		for (const auto& [o, v] : blt::in_pairs(converted_data, a.get_data().data))
+			o = static_cast<float>(v) / limit;
+
+		const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, converted_data.data()};
+		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, output_data.data()};
+
+		const cv::Mat element = cv::getStructuringElement( cv::MORPH_ERODE,
+							 cv::Size( erosion_size, erosion_size ));
+		cv::erode( src, dst, element );
+
+		image_t ret{};
+		for (const auto& [o, v] : blt::in_pairs(ret.get_data().data, output_data))
+			o = static_cast<blt::u32>(v * limit);
+
+		return ret;
+	}, "erode_image");
+
+	static operation_t op_dilate([program](const image_t a) {
+		constexpr auto limit = static_cast<float>(std::numeric_limits<blt::u32>::max());
+		const auto dilate_size = program->get_random().get_i32(3, 12);
+		std::vector<float> converted_data(IMAGE_SIZE);
+		std::vector<float> output_data(IMAGE_SIZE);
+		for (const auto& [o, v] : blt::in_pairs(converted_data, a.get_data().data))
+			o = static_cast<float>(v) / limit;
+
+		const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, converted_data.data()};
+		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, output_data.data()};
+
+		const cv::Mat element = cv::getStructuringElement( cv::MORPH_DILATE,
+							 cv::Size( dilate_size, dilate_size ));
+		cv::dilate( src, dst, element );
+
+		image_t ret{};
+		for (const auto& [o, v] : blt::in_pairs(ret.get_data().data, output_data))
+			o = static_cast<blt::u32>(v * limit);
+
+		return ret;
+	}, "dilate_image");
 
 	operator_builder builder{};
 	builder.build(op_image_ephemeral, make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y,
 				op_image_sin, op_image_gt, op_image_lt, op_image_cos, op_image_log, op_image_exp, op_image_or, op_image_and, op_image_xor,
 				op_image_cos_off, op_image_sin_off, op_image_perlin, op_image_noise, op_image_random, op_image_2d_perlin_eph, op_image_not,
-				op_image_grad, op_image_2d_perlin_oct);
-	// builder.build(op_image_grad, op_image_x, op_image_y);
+				op_image_grad, op_image_2d_perlin_oct, op_erode, op_dilate);
+	// builder.build(op_erode, op_image_2d_perlin_oct);
 	program->set_operations(builder.grab());
 }
 
 void setup_gp_system(const blt::size_t population_size)
 {
-	reference_image = image_storage_t::from_file("../silly.png");
+	reference_image = image_storage_t::from_file("../backend.png");
 
 	config.set_pop_size(population_size);
 	config.set_elite_count(2);
