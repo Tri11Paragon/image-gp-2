@@ -200,7 +200,54 @@ void update(const blt::gfx::window_data& data)
 		// 3. Statistics tab
 		if (ImGui::BeginTabItem("Statistics"))
 		{
-			ImGui::Text("Here you can view statistics.");
+			auto [mean_chan, variance_chan] = get_mean_and_variance();
+
+			for (const auto [i, mean] : blt::enumerate(mean_chan))
+			{
+				std::string type;
+				switch (i)
+				{
+					case 0:
+						type = "Red";
+						break;
+					case 1:
+						type = "Green";
+						break;
+					case 2:
+						type = "Blue";
+						break;
+					default: break;
+				}
+
+				if (ImPlot::BeginPlot(("Mean Graph " + type).c_str()))
+				{
+					ImPlot::PlotLine("Mean", mean.data(), static_cast<int>(mean.size()));
+					ImPlot::EndPlot();
+				}
+			}
+
+			for (const auto [i, variance] : blt::enumerate(variance_chan))
+			{
+				std::string type;
+				switch (i)
+				{
+					case 0:
+						type = "Red";
+						break;
+					case 1:
+						type = "Green";
+						break;
+					case 2:
+						type = "Blue";
+						break;
+					default: break;
+				}
+				if (ImPlot::BeginPlot(("Variance Graph " + type).c_str()))
+				{
+					ImPlot::PlotLine("Variance", variance.data(), static_cast<int>(variance.size()));
+					ImPlot::EndPlot();
+				}
+			}
 
 			auto pops = get_populations();
 

@@ -38,6 +38,22 @@ float filter_nan(const float f, const float failure = 0.0f)
 	return f;
 }
 
+std::vector<float> to_cv2(const image_t& a)
+{
+	std::vector<float> converted_data(IMAGE_SIZE);
+	for (const auto& [o, v] : blt::in_pairs(converted_data, a.get_data().data))
+		o = static_cast<float>(v) / static_cast<float>(std::numeric_limits<blt::u32>::max());
+	return converted_data;
+}
+
+image_t from_cv2(const std::vector<float>& a)
+{
+	image_t ret;
+	for (const auto& [o, v] : blt::in_pairs(ret.get_data().data, a))
+		o = static_cast<blt::u32>(v * static_cast<float>(std::numeric_limits<blt::u32>::max()));
+	return ret;
+}
+
 bool use_gamma_correction = false;
 
 std::array<gp_program*, 3> programs;
@@ -53,6 +69,9 @@ std::vector<float> average_fitness;
 std::vector<float> best_fitness;
 std::vector<float> worst_fitness;
 std::vector<float> overall_fitness;
+
+std::array<std::vector<float>, 3> mean_vec;
+std::array<std::vector<float>, 3> variance_vec;
 
 template <size_t Channel>
 void fitness_func(const tree_t& tree, fitness_t& fitness, const blt::size_t index)
@@ -203,6 +222,18 @@ void setup_operations(gp_program* program)
 			ret.get_data().data[i] = static_cast<blt::u32>(std::exp(v / limit) * limit);
 		return ret;
 	}, "exp_image");
+	static operation_t op_image_abs([](const image_t a) {
+		image_t ret{};
+		for (const auto& [i, v] : blt::enumerate(std::as_const(a.get_data().data)))
+			ret.get_data().data[i] = std::numeric_limits<blt::u32>::max() - v;
+		return ret;
+	}, "abs_image");
+	static operation_t op_image_mod([](const image_t a, const image_t b) {
+		image_t ret{};
+		for (const auto& [i, av, bv] : blt::in_pairs(std::as_const(a.get_data().data), std::as_const(b.get_data().data)).enumerate().flatten())
+			ret.get_data().data[i] = bv == 0 ? 0 : av % bv;
+		return ret;
+	}, "mod_image");
 	static operation_t op_image_or([](const image_t a, const image_t b) {
 		image_t ret{};
 		for (const auto& [i, av, bv] : blt::in_pairs(std::as_const(a.get_data().data), std::as_const(b.get_data().data)).enumerate().flatten())
@@ -227,6 +258,29 @@ void setup_operations(gp_program* program)
 			ret.get_data().data[i] = ~av;
 		return ret;
 	}, "bit_not_image");
+	static operation_t op_image_srgb([](const image_t a) {
+		constexpr auto limit = static_cast<double>(std::numeric_limits<blt::u32>::max());
+		image_t ret{};
+		for (const auto& [i, av] : blt::enumerate(std::as_const(a.get_data().data)).flatten())
+			ret.get_data().data[i] = static_cast<blt::u32>(std::pow(av / limit, 1.0/2.2) * limit);
+		return ret;
+	}, "srgb_image");
+	static operation_t op_image_linear([](const image_t a) {
+		struct f
+		{
+			static float srgb_to_linear(const float v) noexcept
+			{
+				return (v <= 0.04045f) ? (v / 12.92f)
+									   : std::pow((v + 0.055f) / 1.055f, 2.4f);
+			}
+		};
+
+		constexpr auto limit = static_cast<float>(std::numeric_limits<blt::u32>::max());
+		image_t ret{};
+		for (const auto& [i, av] : blt::enumerate(std::as_const(a.get_data().data)).flatten())
+			ret.get_data().data[i] = static_cast<blt::u32>(f::srgb_to_linear(static_cast<float>(av) / limit) * limit);
+		return ret;
+	}, "srgb_image");
 	static operation_t op_image_gt([](const image_t a, const image_t b) {
 		image_t ret{};
 		for (const auto& [i, av, bv] : blt::in_pairs(std::as_const(a.get_data().data), std::as_const(b.get_data().data)).enumerate().flatten())
@@ -313,62 +367,67 @@ void setup_operations(gp_program* program)
 	}, "passthrough");
 
 	static operation_t op_erode([program](const image_t a) {
-		constexpr auto limit = static_cast<float>(std::numeric_limits<blt::u32>::max());
 		const auto erosion_size = program->get_random().get_i32(3, 12);
-		std::vector<float> converted_data(IMAGE_SIZE);
+		std::vector<float> converted_data = to_cv2(a);
 		std::vector<float> output_data(IMAGE_SIZE);
-
-		for (const auto& [o, v] : blt::in_pairs(converted_data, a.get_data().data))
-			o = static_cast<float>(v) / limit;
 
 		const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, converted_data.data()};
 		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, output_data.data()};
 
-		const cv::Mat element = cv::getStructuringElement( cv::MORPH_ERODE,
-							 cv::Size( erosion_size, erosion_size ));
-		cv::erode( src, dst, element );
+		const cv::Mat element = cv::getStructuringElement(cv::MORPH_ERODE, cv::Size(erosion_size, erosion_size));
+		cv::erode(src, dst, element);
 
-		image_t ret{};
-		for (const auto& [o, v] : blt::in_pairs(ret.get_data().data, output_data))
-			o = static_cast<blt::u32>(v * limit);
-
-		return ret;
+		return from_cv2(output_data);
 	}, "erode_image");
 
 	static operation_t op_dilate([program](const image_t a) {
-		constexpr auto limit = static_cast<float>(std::numeric_limits<blt::u32>::max());
 		const auto dilate_size = program->get_random().get_i32(3, 12);
-		std::vector<float> converted_data(IMAGE_SIZE);
+		std::vector<float> converted_data = to_cv2(a);
 		std::vector<float> output_data(IMAGE_SIZE);
-		for (const auto& [o, v] : blt::in_pairs(converted_data, a.get_data().data))
-			o = static_cast<float>(v) / limit;
 
 		const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, converted_data.data()};
 		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, output_data.data()};
 
-		const cv::Mat element = cv::getStructuringElement( cv::MORPH_DILATE,
-							 cv::Size( dilate_size, dilate_size ));
-		cv::dilate( src, dst, element );
+		const cv::Mat element = cv::getStructuringElement(cv::MORPH_DILATE, cv::Size(dilate_size, dilate_size));
+		cv::dilate(src, dst, element);
 
-		image_t ret{};
-		for (const auto& [o, v] : blt::in_pairs(ret.get_data().data, output_data))
-			o = static_cast<blt::u32>(v * limit);
-
-		return ret;
+		return from_cv2(output_data);
 	}, "dilate_image");
+	static operation_t op_band_pass([program](const image_t a) {
+		auto input = to_cv2(a);
+		std::vector<float> output_data(IMAGE_SIZE);
+
+		const cv::Mat src{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, input.data()};
+		cv::Mat dst{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F, output_data.data()};
+
+		const auto sigmaLow = program->get_random().get_float(0.5f, 2.0f);
+		const auto sigmaHigh = program->get_random().get_float(3.f, 12.f);
+
+		const auto size = program->get_random().get_i32(1,5) * 2 + 1;
+
+		cv::Mat low{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F}, high{IMAGE_DIMENSIONS, IMAGE_DIMENSIONS, CV_32F};
+		cv::GaussianBlur(src, low,  cv::Size(size, size), sigmaLow);
+		cv::GaussianBlur(src, high, cv::Size(size, size), sigmaHigh);
+
+		cv::Mat dog = high - low;
+		cv::normalize(dog, dog, 0, 1, cv::NORM_MINMAX);
+		dog.copyTo(dst);
+
+		return from_cv2(output_data);
+	}, "band_pass");
 
 	operator_builder builder{};
 	builder.build(op_image_ephemeral, make_add<image_t>(), make_sub<image_t>(), make_mul<image_t>(), make_div<image_t>(), op_image_x, op_image_y,
 				op_image_sin, op_image_gt, op_image_lt, op_image_cos, op_image_log, op_image_exp, op_image_or, op_image_and, op_image_xor,
-				op_image_cos_off, op_image_sin_off, op_image_perlin, op_image_noise, op_image_random, op_image_2d_perlin_eph, op_image_not,
-				op_image_grad, op_image_2d_perlin_oct, op_erode, op_dilate);
-	// builder.build(op_erode, op_image_2d_perlin_oct);
+				op_band_pass, op_image_perlin, op_image_noise, op_image_random, op_image_2d_perlin_eph, op_image_not, op_image_srgb,
+				op_image_grad, op_image_2d_perlin_oct, op_erode, op_dilate, op_image_abs, op_image_mod, op_image_linear);
+	// builder.build(op_thresh, op_image_2d_perlin_oct);
 	program->set_operations(builder.grab());
 }
 
 void setup_gp_system(const blt::size_t population_size)
 {
-	reference_image = image_storage_t::from_file("../backend.png");
+	reference_image = image_storage_t::from_file("../silly.png");
 
 	config.set_pop_size(population_size);
 	config.set_elite_count(2);
@@ -417,6 +476,41 @@ void run_step()
 		program->evaluate_fitness();
 	for (const auto [i, program] : blt::enumerate(programs))
 	{
+		auto& cur = program->get_current_pop();
+		auto mean = std::accumulate(cur.begin(), cur.end(), 0.0, [](const double a, const individual_t& b) {
+			return a + b.fitness.adjusted_fitness;
+		}) / static_cast<double>(cur.get_individuals().size());
+
+		auto variance = std::accumulate(cur.begin(), cur.end(), 0.0, [mean](const double a, const individual_t& b) {
+			const auto amount = (b.fitness.adjusted_fitness - mean);
+			return a + amount * amount;
+		}) / static_cast<double>(cur.get_individuals().size());
+
+		mean_vec[i].push_back(static_cast<float>(mean));
+		variance_vec[i].push_back(static_cast<float>(variance));
+
+		if (i == 0)
+			BLT_TRACE("Channel Red");
+		else if (i == 1)
+			BLT_TRACE("Channel Green");
+		else
+			BLT_TRACE("Channel Blue");
+		BLT_TRACE("	Program has variance of {}", variance);
+
+		if (program->get_random().choice())
+		{
+			const auto amount = static_cast<size_t>(static_cast<double>(cur.get_individuals().size()) * 0.1);
+			for (size_t j = 0; j < amount; j++)
+			{
+				static grow_generator_t gen;
+				const auto index = cur.get_individuals().size() - 1 - j;
+				cur.get_individuals()[index].tree.regen(gen, program->get_typesystem().get_type<image_t>().id(), 6, 10);
+			}
+		}
+		program->evaluate_fitness();
+	}
+	for (const auto [i, program] : blt::enumerate(programs))
+	{
 		const auto& stats = program->get_population_stats();
 		if (i == 0)
 			BLT_TRACE("Channel Red");
@@ -449,8 +543,8 @@ bool should_terminate()
 
 std::array<image_ipixel_t, IMAGE_DIMENSIONS * IMAGE_DIMENSIONS * 3>& get_image(const blt::size_t index)
 {
-	for (const auto& [i, image_red, image_green, image_blue] : blt::zip(images_red[index], images_green[index],
-																				images_blue[index]).enumerate().flatten())
+	for (const auto& [i, image_red, image_green, image_blue] : blt::zip(images_red[index], images_green[index], images_blue[index]).enumerate().
+																																	flatten())
 	{
 		images[index][i * 3] = image_red;
 		images[index][i * 3 + 1] = image_green;
@@ -537,4 +631,11 @@ std::array<population_t*, 3> get_populations()
 }
 
 void set_use_gamma_correction(bool use)
-{use_gamma_correction = true;}
+{
+	use_gamma_correction = true;
+}
+
+std::pair<std::array<std::vector<float>, 3>&, std::array<std::vector<float>, 3>&> get_mean_and_variance()
+{
+	return {mean_vec, variance_vec};
+}

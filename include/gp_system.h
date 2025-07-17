@@ -52,4 +52,6 @@ std::array<blt::gp::population_t*, 3> get_populations();
 
 void set_use_gamma_correction(bool use);
 
+std::pair<std::array<std::vector<float>, 3>&, std::array<std::vector<float>, 3>&> get_mean_and_variance();
+
 #endif //GP_SYSTEM_H
